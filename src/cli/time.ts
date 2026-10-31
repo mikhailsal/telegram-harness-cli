@@ -19,10 +19,20 @@ export function formatTime(value: string, timezone: string): string {
   return `${p.year ?? ""}-${p.month ?? ""}-${p.day ?? ""} ${p.hour ?? ""}:${p.minute ?? ""}:${p.second ?? ""} ${p.timeZoneName ?? timezone}`;
 }
 function parseAbsolute(value: string): string | undefined {
-  const relative = /^(\d+)d$/.exec(value);
-  if (relative?.[1])
-    return new Date(Date.now() - Number(relative[1]) * 86400000).toISOString();
-  if (!/^\d{4}-\d{2}-\d{2}T/.test(value)) return;
+  const relative = /^(\d+)([dh])$/.exec(value);
+  if (relative?.[1]) {
+    const unit = relative[2] === "h" ? 3600000 : 86400000;
+    const time = new Date(Date.now() - Number(relative[1]) * unit);
+    return Number.isNaN(time.valueOf()) ? undefined : time.toISOString();
+  }
+  const absolute = /^(\d{4}-\d{2}-\d{2})T/.exec(value);
+  if (!absolute?.[1]) return;
+  const date = new Date(`${absolute[1]}T00:00:00Z`);
+  if (
+    Number.isNaN(date.valueOf()) ||
+    date.toISOString().slice(0, 10) !== absolute[1]
+  )
+    return;
   const time = new Date(value);
   if (!Number.isNaN(time.valueOf())) return time.toISOString();
 }

@@ -22,6 +22,9 @@ commands do not expose internal message IDs in their output. `thc render
 `thc render response.md` or pipe Markdown to `thc render` to apply the same
 visibility rules as outgoing Telegram messages without a configured folder.
 
+`--since` accepts a date, a displayed timestamp, or relative days/hours such as
+`7d` and `12h`. Invalid calendar dates and out-of-range times are rejected.
+
 `thc init --update` selects the installed current package for this folder.
 `thc init --to VERSION --no-start` selects an installed version only if it can
 read the current database schema. The installer creates a database backup
