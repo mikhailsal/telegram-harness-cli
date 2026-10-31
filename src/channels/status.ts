@@ -19,6 +19,7 @@ export class ChannelStatus {
   private pending: Promise<void> | undefined;
   private revision = 0;
   private stopped = false;
+  private paused = false;
   private retryAt = 0;
   private repostCheckAt = 0;
   constructor(
@@ -39,6 +40,11 @@ export class ChannelStatus {
     this.now = now;
   }
   update(text: string, force = false): void {
+    if (this.paused) {
+      this.text = text;
+      this.revision++;
+      return;
+    }
     if (
       !force &&
       this.text === text &&
@@ -66,7 +72,7 @@ export class ChannelStatus {
     );
   }
   private async flush(): Promise<void> {
-    if (this.stopped || this.busy) return;
+    if (this.stopped || this.paused || this.busy) return;
     if (this.now().getTime() < this.retryAt) {
       this.update(this.text, true);
       return;
@@ -83,7 +89,12 @@ export class ChannelStatus {
     }
   }
   private scheduleChanged(revision: number): void {
-    if (!this.stopped && this.revision !== revision && !this.timer)
+    if (
+      !this.stopped &&
+      !this.paused &&
+      this.revision !== revision &&
+      !this.timer
+    )
       this.update(this.text, true);
   }
   private async sendStatus(): Promise<void> {
@@ -176,13 +187,22 @@ export class ChannelStatus {
     this.update(this.text, true);
     return true;
   }
-  async stop(): Promise<void> {
-    this.stopped = true;
+  async pause(): Promise<void> {
+    this.paused = true;
     if (this.timer) clearTimeout(this.timer);
     if (this.heartbeat) clearInterval(this.heartbeat);
     this.timer = undefined;
     this.heartbeat = undefined;
     await this.pending;
+  }
+  resume(): void {
+    if (!this.paused || this.stopped) return;
+    this.paused = false;
+    this.update(this.text, true);
+  }
+  async stop(): Promise<void> {
+    this.stopped = true;
+    await this.pause();
     if (this.transient && this.transientId)
       await this.transient.remove(this.transientId);
     else if (this.messageId !== undefined) {

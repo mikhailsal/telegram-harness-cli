@@ -38,6 +38,8 @@ function fallbackText(context: RuntimeContext, status: TerminalStatus): string {
 export class Delivery {
   private readonly context: RuntimeContext;
   private sending = false;
+  onSending: ((turnId: string) => Promise<void>) | undefined;
+  onSendFailed: ((turnId: string) => void) | undefined;
   onDelivered: ((turnId: string) => Promise<void>) | undefined;
   constructor(context: RuntimeContext) {
     this.context = context;
@@ -168,12 +170,19 @@ export class Delivery {
   }
   private async send(row: Outbox): Promise<void> {
     const { store, channel } = this.context;
+    if (
+      row.nextAttemptAt &&
+      row.nextAttemptAt > this.context.now().toISOString()
+    )
+      return;
+    if (row.chunk >= 0) await this.onSending?.(row.turnId);
     if (!store.beginSend(row.id, this.context.now().toISOString())) return;
     let chunk: Chunk;
     try {
       chunk = chunkSchema.parse(JSON.parse(row.payload ?? "null") as unknown);
     } catch {
       store.markFailed(row.id, "invalid-payload");
+      this.notifyFailure(row);
       return;
     }
     let delivered: Awaited<ReturnType<typeof channel.deliverChunk>>;
@@ -186,6 +195,7 @@ export class Delivery {
       });
       if (delivered.messageIds[0] === undefined) {
         store.markFailed(row.id, "missing-message-id");
+        this.notifyFailure(row);
         return;
       }
     } catch (error) {
@@ -238,6 +248,9 @@ export class Delivery {
     )
       await this.onDelivered?.(row.turnId);
   }
+  private notifyFailure(row: Outbox): void {
+    if (row.chunk >= 0) this.onSendFailed?.(row.turnId);
+  }
   private failed(row: Outbox, error: unknown): void {
     const result = classifyTelegramError(error);
     if (["network", "server", "rate-limit"].includes(result.kind)) {
@@ -249,6 +262,7 @@ export class Delivery {
         new Date(this.context.now().getTime() + seconds * 1000).toISOString(),
       );
     } else this.context.store.markFailed(row.id, result.kind);
+    this.notifyFailure(row);
     this.context.log("delivery.failed", { kind: result.kind });
   }
 }

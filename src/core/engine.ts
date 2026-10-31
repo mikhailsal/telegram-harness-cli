@@ -34,6 +34,8 @@ const requestEvents = new Set<AdapterEvent["kind"]>([
   "question-requested",
 ]);
 export interface EngineDelivery extends CommandDelivery {
+  onSending?: ((turnId: string) => Promise<void>) | undefined;
+  onSendFailed?: ((turnId: string) => void) | undefined;
   onDelivered: ((turnId: string) => Promise<void>) | undefined;
   flush(): Promise<void>;
 }
@@ -52,6 +54,10 @@ export class TurnEngine {
     this.delivery = delivery;
     this.commands = new Commands(context, delivery);
     this.events = new AdapterEvents(context, delivery);
+    delivery.onSending = (turnId) => this.statuses.pause(turnId);
+    delivery.onSendFailed = (turnId) => {
+      this.statuses.resumeUnsent(turnId);
+    };
     delivery.onDelivered = async (turnId) => {
       await this.statuses.remove(turnId);
       await context.transient.removeKind("welcome");

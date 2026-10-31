@@ -132,6 +132,15 @@ export class TurnStatuses {
     this.rows.set(turn.id, status);
     return status;
   }
+  async pause(id: string): Promise<void> {
+    await this.rows.get(id)?.pause();
+  }
+  resumeUnsent(id: string): void {
+    const delivered = this.ctx.store
+      .listOutbox(["sent"])
+      .some((row) => row.turnId === id && row.chunk >= 0);
+    if (!delivered) this.rows.get(id)?.resume();
+  }
   async remove(id: string): Promise<void> {
     await this.rows.get(id)?.stop();
     this.rows.delete(id);
