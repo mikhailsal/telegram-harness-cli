@@ -1,0 +1,37 @@
+.form {
+  display: grid;
+  gap: 1rem;
+  max-width: 32rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.field input,
+.field textarea,
+.form button {
+  padding: 0.5rem;
+  border: 1px solid #595959;
+  border-radius: 0.25rem;
+  font: inherit;
+}
+
+.field [aria-invalid="true"] {
+  border-color: #b00020;
+}
+
+.form button {
+  justify-self: start;
+  padding-inline: 1.5rem;
+}
+
+.problem {
+  margin: 0;
+  color: #b00020;
+}
+
+.status {
+  min-height: 1.5rem;
+}

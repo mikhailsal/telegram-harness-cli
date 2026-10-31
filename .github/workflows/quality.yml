@@ -1,0 +1,248 @@
+# The required quality status (decision 0015). This file only translates GitHub
+# events into explicit revisions and installs the pinned environment; the
+# `quality` CLI makes every pass or fail decision. The jobs `gate` and `browser`
+# run the two lanes of the gate (decision 0018). The job `required` is the one
+# status that branch protection requires.
+name: quality
+
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the tested revision with its history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install the PHP runtime (decision 0002)
+        run: |
+          sudo add-apt-repository --yes ppa:ondrej/php
+          sudo apt-get update
+          sudo apt-get install --yes shellcheck php8.4-cli php8.4-xml php8.4-mbstring php8.4-zip \
+            php8.4-xdebug php8.4-pcov
+          sudo phpdismod -v 8.4 -s ALL xdebug pcov
+          sudo update-alternatives --set php /usr/bin/php8.4
+      - name: Allow the network isolation of the test suites (decision 0015)
+        # Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor; every
+        # suite runs in one without network access, or the gate warns (tests.network).
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Restore the download cache of the default branch
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/quality
+          key: quality-cache-${{ hashFiles('tools/quality/toolchains.toml', '**/*.lock', '**/package-lock.json') }}
+          restore-keys: quality-cache-
+      - name: Restore the coverage baseline of the default branch
+        if: github.event_name != 'push'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/baseline
+          key: quality-baseline-${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          restore-keys: quality-baseline-
+      - name: Install the pinned tools and packages
+        run: ./quality bootstrap
+      - name: Check shell scripts in the tested revision
+        run: python3 tools/quality/launcher/scripts/shellcheck-revision.py "$GITHUB_SHA"
+      - name: Run the main lane of the gate over the revisions of the event
+        env:
+          EVENT: ${{ github.event_name }}
+          TESTED: ${{ github.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
+          QUEUE_HEAD: ${{ github.event.merge_group.head_sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          BASELINE: ${{ runner.temp }}/baseline/report.json
+        run: |
+          case "$EVENT" in
+            pull_request)
+              # The tested merge commit is built on its first parent.
+              set -- --stage merge --base "$(git rev-parse "$TESTED^1")" --head "$PR_HEAD" \
+                --tested "$TESTED" ;;
+            merge_group)
+              set -- --stage merge --base "$QUEUE_BASE" --head "$QUEUE_HEAD" --queue ;;
+            push)
+              set -- --stage commit --base "$PUSH_BEFORE" --head "$TESTED" ;;
+            *)
+              echo "unsupported event: $EVENT" >&2
+              exit 2 ;;
+          esac
+          if [ -f "$BASELINE" ]; then
+            set -- "$@" --baseline "$BASELINE"
+          fi
+          ./quality gate "$@" --lane main --reports reports
+      - name: Upload the reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: quality-reports
+          path: reports
+          if-no-files-found: ignore
+      - name: Keep the report as the next coverage baseline
+        if: github.event_name == 'push'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: reports/report.json
+          key: quality-baseline-${{ github.sha }}
+      - name: Keep the download cache
+        if: github.event_name == 'push'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/quality
+          key: quality-cache-${{ hashFiles('tools/quality/toolchains.toml', '**/*.lock', '**/package-lock.json') }}
+
+  # The browser lane checks the active browser components, up to the Chromium
+  # scenarios of their production builds. It always runs; the CLI decides what it
+  # checks, and with no browser component it passes with nothing to check.
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the tested revision with its history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install the PHP runtime (decision 0002)
+        run: |
+          sudo add-apt-repository --yes ppa:ondrej/php
+          sudo apt-get update
+          sudo apt-get install --yes php8.4-cli php8.4-xml php8.4-mbstring php8.4-zip \
+            php8.4-xdebug php8.4-pcov
+          sudo phpdismod -v 8.4 -s ALL xdebug pcov
+          sudo update-alternatives --set php /usr/bin/php8.4
+      - name: Allow the network isolation of the test suites (decision 0015)
+        # Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor; every
+        # suite runs in one without network access, or the gate warns (tests.network).
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Restore the download cache of the default branch
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/quality
+          key: quality-cache-${{ hashFiles('tools/quality/toolchains.toml', '**/*.lock', '**/package-lock.json') }}
+          restore-keys: quality-cache-
+      - name: Restore the coverage baseline of the default branch
+        if: github.event_name != 'push'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/baseline
+          key: quality-browser-baseline-${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          restore-keys: quality-browser-baseline-
+      - name: Install the pinned tools and packages
+        run: ./quality bootstrap
+      - name: Run the browser lane of the gate over the revisions of the event
+        env:
+          EVENT: ${{ github.event_name }}
+          TESTED: ${{ github.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
+          QUEUE_HEAD: ${{ github.event.merge_group.head_sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          BASELINE: ${{ runner.temp }}/baseline/report.json
+        run: |
+          case "$EVENT" in
+            pull_request)
+              # The tested merge commit is built on its first parent.
+              set -- --stage merge --base "$(git rev-parse "$TESTED^1")" --head "$PR_HEAD" \
+                --tested "$TESTED" ;;
+            merge_group)
+              set -- --stage merge --base "$QUEUE_BASE" --head "$QUEUE_HEAD" --queue ;;
+            push)
+              set -- --stage commit --base "$PUSH_BEFORE" --head "$TESTED" ;;
+            *)
+              echo "unsupported event: $EVENT" >&2
+              exit 2 ;;
+          esac
+          if [ -f "$BASELINE" ]; then
+            set -- "$@" --baseline "$BASELINE"
+          fi
+          ./quality gate "$@" --lane browser --reports reports
+      - name: Upload the reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: quality-browser-reports
+          path: reports
+          if-no-files-found: ignore
+      - name: Keep the report as the next coverage baseline
+        if: github.event_name == 'push'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: reports/report.json
+          key: quality-browser-baseline-${{ github.sha }}
+
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the tested revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the PHP runtime (decision 0002)
+        run: |
+          sudo add-apt-repository --yes ppa:ondrej/php
+          sudo apt-get update
+          sudo apt-get install --yes php8.4-cli php8.4-xml php8.4-mbstring php8.4-zip \
+            php8.4-xdebug php8.4-pcov
+          sudo phpdismod -v 8.4 -s ALL xdebug pcov
+          sudo update-alternatives --set php /usr/bin/php8.4
+      - name: Restore the download cache of the default branch
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/quality
+          key: quality-cache-${{ hashFiles('tools/quality/toolchains.toml', '**/*.lock', '**/package-lock.json') }}
+          restore-keys: quality-cache-
+      - name: Install the pinned tools and packages
+        run: ./quality bootstrap
+      - name: Match the lockfiles against current advisories
+        run: ./quality audit --rev HEAD
+
+  required:
+    if: always()
+    needs: [gate, browser, audit]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the tested revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the PHP runtime (decision 0002)
+        run: |
+          sudo add-apt-repository --yes ppa:ondrej/php
+          sudo apt-get update
+          sudo apt-get install --yes php8.4-cli php8.4-xml php8.4-mbstring php8.4-zip \
+            php8.4-xdebug php8.4-pcov
+          sudo phpdismod -v 8.4 -s ALL xdebug pcov
+          sudo update-alternatives --set php /usr/bin/php8.4
+      - name: Restore the download cache of the default branch
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/quality
+          key: quality-cache-${{ hashFiles('tools/quality/toolchains.toml', '**/*.lock', '**/package-lock.json') }}
+          restore-keys: quality-cache-
+      - name: Install the pinned tools and packages
+        run: ./quality bootstrap
+      - name: Decide from the results of every required job
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          printf '%s' "$NEEDS" > "$RUNNER_TEMP/needs.json"
+          ./quality ci verdict --needs "$RUNNER_TEMP/needs.json"

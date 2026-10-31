@@ -1,0 +1,45 @@
+SF:pkg/__init__.py
+end_of_record
+SF:pkg/m.py
+DA:1,1
+DA:2,1
+DA:3,1
+DA:4,0
+DA:5,0
+DA:6,0
+DA:7,0
+DA:10,1
+DA:11,0
+LF:9
+LH:4
+FN:1,7,f
+FNDA:1,f
+FN:10,11,g
+FNDA:0,g
+FNF:2
+FNH:1
+BRDA:2,0,jump to line 3,1
+BRDA:2,0,jump to line 4,0
+BRDA:4,0,jump to line 5,-
+BRDA:4,0,jump to line 7,-
+BRDA:5,0,jump to line 4,-
+BRDA:5,0,jump to line 6,-
+BRF:6
+BRH:1
+end_of_record
+SF:pkg/unused.py
+DA:1,0
+DA:2,0
+DA:3,0
+DA:4,0
+LF:4
+LH:0
+FN:1,4,h
+FNDA:0,h
+FNF:1
+FNH:0
+BRDA:2,0,jump to line 3,-
+BRDA:2,0,jump to line 4,-
+BRF:2
+BRH:0
+end_of_record

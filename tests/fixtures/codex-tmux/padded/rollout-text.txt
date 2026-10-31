@@ -1,0 +1,7 @@
+[2026-10-31T12:00:00Z]
+<telegram-message>
+  leading	text  
+blank follows
+
+  final spaces   
+</telegram-message>

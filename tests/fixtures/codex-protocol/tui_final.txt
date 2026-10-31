@@ -1,0 +1,35 @@
+
+
+› Second request while first is active
+
+
+• THC_SPIKE_DEFAULT
+
+  Worked for 5s • 15:39
+
+
+› Synthetic approval request
+
+
+• Ran printf THC_SPIKE_APPROVED; printf x >> approval-count.txt
+  └ THC_SPIKE_APPROVED
+
+• THC_SPIKE_DEFAULT
+
+  Worked for 6s • 15:39
+
+
+› Synthetic workspace policy comparison
+
+
+• Ran printf "THC_SPIKE_ENV=%s\n" "$THC_SPIKE_ENV"; printf ok > tool-marker.txt
+  └ THC_SPIKE_ENV=fixture-process
+
+• THC_SPIKE_DEFAULT
+
+  Worked for 5s • 15:39
+
+
+› Ask Codex to do anything
+
+  thc-fixture default · <SPIKE>/work · ← for agents               ⚠ 1 warning · f2 to view

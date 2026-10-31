@@ -1,0 +1,78 @@
+[project]
+name = "quality-launcher"
+version = "0.1.0"
+description = "Stdlib launcher that prepares and runs the quality core"
+requires-python = ">=3.10"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "coverage==7.16.2",
+    "pytest==9.1.1",
+    "pytest-cov==7.1.0",
+]
+
+[tool.uv]
+required-version = "==0.12.24"
+package = false
+
+[tool.ruff]
+line-length = 100
+# The launcher runs on the system python3 (3.10 or newer) before the core
+# exists; its tests run on the pinned CPython in this directory's environment.
+target-version = "py310"
+per-file-target-version = { "tests/**" = "py314", "e2e/**" = "py314" }
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# Explicit selection, the same as the core's.
+select = [
+    "A", "B", "BLE", "C4", "D", "DTZ", "E", "EM", "F", "FBT", "FURB", "I", "ISC",
+    "N", "PERF", "PGH", "PIE", "PLE", "PLW", "PTH", "RET", "RUF", "S", "SIM",
+    "SLF", "TID", "TRY", "UP", "W",
+]
+ignore = [
+    "D105",  # magic methods document themselves
+    "D107",  # __init__ is documented on the class
+    "D203",  # conflicts with D211
+    "D213",  # conflicts with D212
+    "S603",  # subprocess with argument arrays is the intended design
+    "S607",  # executables are resolved against an explicit PATH
+    "TRY003",  # messages are built in a variable first (EM rules)
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Category policy for test code: assertions are the test mechanism, test
+# functions are documented by their names, and tests may use private helpers.
+"tests/**" = ["S101", "D100", "D101", "D102", "D103", "D104", "SLF001", "FBT"]
+"e2e/**" = ["S101", "D100", "D101", "D102", "D103", "D104", "SLF001", "FBT"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.pyright]
+include = ["src", "tests", "e2e"]
+pythonVersion = "3.10"
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "strict"
+reportMissingTypeStubs = "error"
+reportUnnecessaryTypeIgnoreComment = "error"
+executionEnvironments = [
+    { root = "tests", pythonVersion = "3.14", extraPaths = ["src", "tests"] },
+    { root = "e2e", pythonVersion = "3.14" },
+    { root = "src" },
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "tests"]
+addopts = ["-p", "no:cacheprovider", "--strict-markers", "--strict-config", "--import-mode=importlib"]
+xfail_strict = true
+
+[tool.coverage.run]
+branch = true
+source = ["src"]
+
+[tool.coverage.report]
+show_missing = true

@@ -1,0 +1,24 @@
+{
+    "description": "The structure helper of the quality gate's PHP profile.",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.4.1",
+        "nikic/php-parser": "5.9.0"
+    },
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "3.95.27",
+        "phpstan/phpstan": "2.3.1",
+        "phpunit/phpunit": "13.4.3"
+    },
+    "autoload": {
+        "psr-4": {
+            "Quality\\PhpHelper\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Quality\\PhpHelper\\Tests\\": "tests/"
+        }
+    }
+}

@@ -1,0 +1,3 @@
+{"file":"Calc.php","executable":4,"executed":4,"symbols":[{"name":"App\\Calc::__construct","lines":"9","state":"covered"},{"name":"App\\Calc::sign","lines":"11-17","state":"partial","branches":{"executed":5,"total":6,"uncovered":["13","16"]}}]}
+{"file":"Script.php","executable":2,"executed":0,"uncovered":["9","12"],"symbols":[{"name":"App\\shout","lines":"7-10","state":"uncovered"}]}
+{"file":"Unused.php","executable":1,"executed":0,"uncovered":["9"],"symbols":[{"name":"App\\unused","lines":"7-10","state":"uncovered"}]}

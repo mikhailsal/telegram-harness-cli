@@ -1,0 +1,10 @@
+{
+    "schemaVersion": 1,
+    "generator": "php-code-coverage 14.4.1",
+    "generatedAt": "2026-10-21T02:46:26+00:00",
+    "sourceRoot": "/work/snapshot/app/src",
+    "branchCoverage": true,
+    "files": 3,
+    "executableLines": 7,
+    "executedLines": 4
+}

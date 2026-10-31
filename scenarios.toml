@@ -1,0 +1,89 @@
+schema_version = 1
+component = "telegram-harness-cli"
+
+[[scenarios]]
+id = "built-cli"
+summary = "The built command starts in a clean folder and describes the supported commands."
+capability = "cli"
+level = "e2e"
+stage = "commit"
+requirements = ["cli.smoke"]
+tests = ["tests/e2e/cli.test.ts::the installed CLI artifact starts and explains its commands"]
+boundary = "The compiled executable in a separate Node process; no Telegram or model service."
+
+[[scenarios]]
+id = "cli-render"
+summary = "The built renderer hides private markup, preserves code, and rejects invalid commands."
+capability = "cli"
+level = "e2e"
+stage = "commit"
+requirements = ["cli.flows"]
+tests = [
+  "tests/e2e/cli.test.ts::the built CLI rejects unknown commands with a useful nonzero result",
+  "tests/e2e/cli.test.ts::the built renderer removes hidden content without removing code literals",
+]
+boundary = "The compiled command-line artifact, without external services."
+
+[[scenarios]]
+id = "sqlite-restart"
+summary = "Committed SQLite inbox and output state survive a killed bridge without repeating the task."
+capability = "database"
+level = "e2e"
+stage = "commit"
+requirements = ["database.engine", "database.read-write", "database.transactions", "database.constraints"]
+tests = [
+  "tests/crash/runtime.test.ts::recovers a committed inbox after SIGKILL before offset acknowledgement",
+  "tests/crash/runtime.test.ts::reconciles an accepted submit after SIGKILL without running the task twice",
+]
+boundary = "A real child bridge and SQLite, with separate localhost Bot API and persistent fake harness."
+
+[[scenarios]]
+id = "schema-upgrade"
+summary = "A separate process initializes and upgrades real SQLite files, retaining visible history and a readable backup."
+capability = "migrations"
+level = "integration"
+stage = "commit"
+requirements = ["migrations.fresh", "migrations.upgrade"]
+tests = [
+  "tests/integration/migrations.test.ts::a separate process upgrades each supported database and preserves visible history with a consistent backup",
+  "tests/integration/migrations.test.ts::a fresh database is initialized by a separate process and rejects a future schema without modifying it",
+]
+boundary = "Actual SQLite files and compiled modules in an independent Node process, without external services."
+
+[[scenarios]]
+id = "durable-queue"
+summary = "Queueing, acknowledgement, duplication and response retries keep their contract across process death."
+capability = "queues"
+level = "e2e"
+stage = "commit"
+requirements = ["queues.acknowledgement", "queues.retry", "queues.duplicate"]
+tests = [
+  "tests/crash/runtime.test.ts::queues a follow-up until the active turn completes and delivers both answers",
+  "tests/crash/runtime.test.ts::resends an accepted but unrecorded answer with the duplication flag after SIGKILL",
+  "tests/crash/runtime.test.ts::applies an approval only once when duplicate callback updates arrive",
+]
+boundary = "The real runtime process and SQLite, with local HTTP fixtures replacing Telegram and Codex."
+
+[[scenarios]]
+id = "private-allowlist"
+summary = "Group updates are ignored and a stranger receives only their own ID while authorized traffic continues."
+capability = "authorization"
+level = "e2e"
+stage = "commit"
+requirements = ["authorization.forbidden"]
+tests = ["tests/crash/runtime.test.ts::silently drops group updates and reveals only a stranger's ID over the real local Bot API"]
+boundary = "The real bridge child and a localhost Bot API; allowlisted users are fully trusted by design."
+
+[[not_applicable]]
+requirement = "authorization.isolation"
+reason = "One process owns one folder and bot; the explicit allowlist is a fully trusted owner set, not separate tenants."
+
+[[scenarios]]
+id = "queue-contract"
+summary = "A queued input survives reopening and retains its payload and identity."
+capability = "queues"
+level = "integration"
+stage = "commit"
+requirements = ["queues.contract"]
+tests = ["tests/integration/queue.test.ts::persists the queued input contract across a database reopen"]
+boundary = "A real SQLite database closed and reopened by the store."

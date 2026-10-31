@@ -1,0 +1,2 @@
+{"test":"App\\Tests\\CalcTest::testNegative","covers":{"Calc.php":["9","13","16"]}}
+{"test":"App\\Tests\\CalcTest::testPositive","covers":{"Calc.php":["9","13-14"]}}

@@ -1,0 +1,14 @@
+name: quality_dart_helper
+description: Structure metrics of Dart files for the quality gate.
+publish_to: none
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  analyzer: 14.5.0
+
+dev_dependencies:
+  coverage: 1.16.0
+  lints: 6.1.0
+  test: 1.33.0
