@@ -36,7 +36,7 @@ function transport(fail: Record<string, number> = {}) {
         ok: true,
         result:
           method.startsWith("send") &&
-          !["sendMessageDraft", "sendChatAction"].includes(method)
+          !["sendRichMessageDraft", "sendChatAction"].includes(method)
             ? { message_id: 10, date: 1, chat: { id: 1, type: "private" } }
             : true,
       }),
@@ -87,7 +87,7 @@ it("exposes edit, deletion, callback, typing, draft and both language menus", as
     "deleteMessage",
     "answerCallbackQuery",
     "sendChatAction",
-    "sendMessageDraft",
+    "sendRichMessageDraft",
     "setMyCommands",
     "setMyCommands",
   ]);
@@ -96,6 +96,22 @@ it("exposes edit, deletion, callback, typing, draft and both language menus", as
     "ru",
     "en",
   ]);
+});
+it("pairs the status preview with rich final delivery and keeps its text literal", async () => {
+  const api = transport();
+  const text = "Thinking <path> **literal**\nnext";
+  await api.channel.draft(1, 42, text);
+  await api.channel.send("1", "done");
+  expect(api.calls.map((call) => call.method)).toEqual([
+    "sendRichMessageDraft",
+    "sendRichMessage",
+  ]);
+  expect(api.calls[0]?.body).toMatchObject({
+    chat_id: 1,
+    draft_id: 42,
+    can_stop: true,
+    rich_message: { blocks: [{ type: "paragraph", text }] },
+  });
 });
 it("classifies permanent, throttled, server, and network failures without retrying sends", async () => {
   for (const [code, expected] of [

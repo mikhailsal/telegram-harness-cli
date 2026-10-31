@@ -35,7 +35,7 @@ class StatusApi {
       typeof init?.body === "string" ? init.body : "{}",
     ) as Record<string, unknown>;
     this.calls.push(method);
-    if (method === "sendMessageDraft") {
+    if (method === "sendRichMessageDraft") {
       const apply = () => {
         this.draftVisible = true;
         this.applied.push("draft");

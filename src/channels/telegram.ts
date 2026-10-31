@@ -203,9 +203,13 @@ export class TelegramChannel {
     await this.bot.api.sendChatAction(chatId, "typing");
   }
   async draft(chatId: number, draftId: number, text: string): Promise<void> {
-    await this.bot.api.sendMessageDraft(chatId, draftId, text, {
-      can_stop: true,
-    });
+    // Match rich final delivery so Telegram consumes the preview immediately.
+    await this.bot.api.sendRichMessageDraft(
+      chatId,
+      draftId,
+      { blocks: [{ type: "paragraph", text }] },
+      { can_stop: true },
+    );
   }
   async menu(): Promise<void> {
     for (const language of ["ru", "en"] as const) {

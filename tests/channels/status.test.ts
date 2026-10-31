@@ -8,8 +8,8 @@ it("coalesces status updates and observes Telegram retry_after", async () => {
   const fakeFetch: typeof fetch = (_input, init) => {
     const body = JSON.parse(
       typeof init?.body === "string" ? init.body : "{}",
-    ) as { text?: string };
-    calls.push(body.text ?? "");
+    ) as { rich_message?: { blocks?: { text?: string }[] } };
+    calls.push(body.rich_message?.blocks?.[0]?.text ?? "");
     if (calls.length === 1)
       return Promise.resolve(
         Response.json({
@@ -48,7 +48,7 @@ function fallbackTransport(methods: string[]): typeof fetch {
           : input.url;
     const method = url.split("/").at(-1) ?? "";
     methods.push(method);
-    if (method === "sendMessageDraft")
+    if (method === "sendRichMessageDraft")
       return Promise.resolve(
         Response.json({
           ok: false,
@@ -90,7 +90,7 @@ it("falls back to a durable editable message and removes it when stopped", async
   await vi.advanceTimersByTimeAsync(1000);
   await status.stop();
   expect(methods).toEqual([
-    "sendMessageDraft",
+    "sendRichMessageDraft",
     "sendMessage",
     "sendChatAction",
     "editMessageText",
@@ -108,8 +108,8 @@ it("delivers an update queued during an in-flight draft and waits on stop", asyn
   const fakeFetch: typeof fetch = (_input, init) => {
     const body = JSON.parse(
       typeof init?.body === "string" ? init.body : "{}",
-    ) as { text?: string };
-    texts.push(body.text ?? "");
+    ) as { rich_message?: { blocks?: { text?: string }[] } };
+    texts.push(body.rich_message?.blocks?.[0]?.text ?? "");
     if (texts.length === 1)
       return new Promise<Response>((resolve) => {
         resolveFirst = resolve;
@@ -146,7 +146,7 @@ it("deletes a fallback message even when stop races its send", async () => {
           : input.url;
     const method = url.split("/").at(-1) ?? "";
     methods.push(method);
-    if (method === "sendMessageDraft")
+    if (method === "sendRichMessageDraft")
       return Promise.resolve(
         Response.json({
           ok: false,
