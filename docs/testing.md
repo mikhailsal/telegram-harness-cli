@@ -31,6 +31,7 @@ Before tagging, use a separate test bot and phone for this manual checklist:
 
 - Verify rich text, long answers, code blocks and a large code attachment.
 - Verify the draft appears, its stop button works, and it restarts after a card.
+  Check its native thinking animation while the task runs.
   It must disappear immediately with the final answer, without a lingering timer.
 - Tap both approval choices, check the collapsed details and stale-button toast.
 - Check a question, a reaction, a reply and a forwarded message.

@@ -97,7 +97,7 @@ it("exposes edit, deletion, callback, typing, draft and both language menus", as
     "en",
   ]);
 });
-it("pairs the status preview with rich final delivery and keeps its text literal", async () => {
+it("pairs an animated thinking preview with rich final delivery and keeps its text literal", async () => {
   const api = transport();
   const text = "Thinking <path> **literal**\nnext";
   await api.channel.draft(1, 42, text);
@@ -110,7 +110,7 @@ it("pairs the status preview with rich final delivery and keeps its text literal
     chat_id: 1,
     draft_id: 42,
     can_stop: true,
-    rich_message: { blocks: [{ type: "paragraph", text }] },
+    rich_message: { blocks: [{ type: "thinking", text }] },
   });
 });
 it("classifies permanent, throttled, server, and network failures without retrying sends", async () => {

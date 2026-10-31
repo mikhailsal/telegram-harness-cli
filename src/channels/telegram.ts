@@ -207,7 +207,7 @@ export class TelegramChannel {
     await this.bot.api.sendRichMessageDraft(
       chatId,
       draftId,
-      { blocks: [{ type: "paragraph", text }] },
+      { blocks: [{ type: "thinking", text }] },
       { can_stop: true },
     );
   }
