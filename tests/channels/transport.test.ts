@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import {
   TelegramChannel,
   sendApproval,
@@ -74,7 +74,7 @@ it("sends escaped approval and question cards with the intended buttons and soun
   expect(JSON.stringify(api.calls[0]?.body.reply_markup)).toContain("Да");
   expect(JSON.stringify(api.calls[1]?.body.reply_markup)).toContain('"A"');
 });
-it("exposes edit, deletion, callback, typing, draft and both language menus", async () => {
+it("exposes edit, deletion, callback, typing, draft and default plus localized menus", async () => {
   const api = transport();
   await api.channel.edit("1", 10, "new");
   await api.channel.delete("1", 10);
@@ -90,9 +90,11 @@ it("exposes edit, deletion, callback, typing, draft and both language menus", as
     "sendRichMessageDraft",
     "setMyCommands",
     "setMyCommands",
+    "setMyCommands",
   ]);
   expect(api.calls[4]?.body.can_stop).toBe(true);
-  expect(api.calls.slice(-2).map((call) => call.body.language_code)).toEqual([
+  expect(api.calls.slice(-3).map((call) => call.body.language_code)).toEqual([
+    undefined,
     "ru",
     "en",
   ]);
@@ -112,6 +114,69 @@ it("pairs an animated thinking preview with rich final delivery and keeps its te
     can_stop: true,
     rich_message: { blocks: [{ type: "thinking", text }] },
   });
+});
+it("tracks only successful live previews and consumes them on direct rich sends", async () => {
+  vi.useFakeTimers();
+  const api = transport();
+  try {
+    await api.channel.draft(1, 42, "thinking");
+    expect(api.channel.hasDraft("1", 42)).toBe(true);
+    expect(api.channel.hasDraft("1", 43)).toBe(false);
+    expect(api.channel.hasDraft("2", 42)).toBe(false);
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(api.channel.hasDraft("1", 42)).toBe(false);
+    await api.channel.draft(1, 43, "waiting");
+    await api.channel.bot.api.sendRichMessage(2, { markdown: "other chat" });
+    expect(api.channel.hasDraft("1", 43)).toBe(true);
+    await api.channel.bot.api.sendRichMessage(1, { markdown: "card" });
+    expect(api.channel.hasDraft("1", 43)).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("does not invent or consume a preview when its API operation fails", async () => {
+  const failedDraft = transport({ sendRichMessageDraft: 429 });
+  await expect(failedDraft.channel.draft(1, 42, "thinking")).rejects.toThrow();
+  expect(failedDraft.channel.hasDraft("1", 42)).toBe(false);
+  const failedAnswer = transport({ sendRichMessage: 429 });
+  await failedAnswer.channel.draft(1, 42, "thinking");
+  await expect(failedAnswer.channel.send("1", "answer")).rejects.toThrow();
+  expect(failedAnswer.channel.hasDraft("1", 42)).toBe(true);
+});
+it("restores a suppressed reply only for a plain fallback without leaking metadata", async () => {
+  const api = transport({ sendRichMessage: 400 });
+  await api.channel.deliverChunk(
+    "1",
+    { kind: "message", text: "answer", plain: "answer" },
+    { fallbackReplyToMessageId: 58 },
+  );
+  expect(api.calls[0]?.body).not.toHaveProperty("reply_parameters");
+  expect(api.calls[1]?.body.reply_parameters).toEqual({ message_id: 58 });
+  expect(
+    api.calls.every((call) => !("fallbackReplyToMessageId" in call.body)),
+  ).toBe(true);
+});
+it("restores the source reply when a rich answer falls back to a document", async () => {
+  const api = transport({ sendRichMessage: 400 });
+  const payloads: { method: string; payload: unknown }[] = [];
+  api.channel.bot.api.config.use((prev, method, payload, signal) => {
+    payloads.push({ method, payload });
+    return prev(method, payload, signal);
+  });
+  const text = "x".repeat(5000);
+  await api.channel.deliverChunk(
+    "1",
+    { kind: "message", text, plain: text },
+    { fallbackReplyToMessageId: 58 },
+  );
+  expect(payloads.map(({ method }) => method)).toEqual([
+    "sendRichMessage",
+    "sendDocument",
+  ]);
+  expect(payloads[1]?.payload).toMatchObject({
+    reply_parameters: { message_id: 58 },
+  });
+  expect(payloads[1]?.payload).not.toHaveProperty("fallbackReplyToMessageId");
 });
 it("classifies permanent, throttled, server, and network failures without retrying sends", async () => {
   for (const [code, expected] of [

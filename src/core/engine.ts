@@ -6,6 +6,7 @@ import type { Turn } from "../store/index.js";
 import type { RuntimeContext } from "./context.js";
 import { Commands } from "./commands.js";
 import { TurnStatuses } from "./status.js";
+import { turnDraftId } from "./turn-draft.js";
 import type { CommandDelivery } from "./commands.js";
 import { AdapterEvents, activeTurn, queueRequestSummaries } from "./events.js";
 import {
@@ -106,6 +107,7 @@ export class TurnEngine {
       }
       await this.processInbox();
       await this.pump();
+      await this.statuses.cancelled();
       await this.delivery.flush();
       this.statuses.refresh();
     });
@@ -153,6 +155,7 @@ export class TurnEngine {
       queueRequestSummaries(this.ctx);
       await this.processInbox();
       await this.pump();
+      await this.statuses.cancelled();
       await this.delivery.flush();
       this.statuses.refresh();
     });
@@ -184,8 +187,7 @@ export class TurnEngine {
         continue;
       }
       if (event.kind === "generation-stopped") {
-        await this.stopActive();
-        await this.statuses.cancelled();
+        await this.stopActive(event);
       }
       this.ctx.store.consumeControl(event.updateId);
     }
@@ -194,6 +196,10 @@ export class TurnEngine {
   private async processCommand(
     event: Extract<ChannelEvent, { kind: "command" }>,
   ): Promise<void> {
+    if (event.command === "stop") {
+      await this.commands.run(event);
+      await this.pump();
+    }
     await this.ctx.transient.removeKind("command", event.chatId);
     this.ctx.transient.registerExisting(
       transientIntent(
@@ -204,8 +210,7 @@ export class TurnEngine {
       ),
       event.messageId,
     );
-    if (event.command === "stop") await this.prepareStop();
-    await this.commands.run(event);
+    if (event.command !== "stop") await this.commands.run(event);
     await this.statuses.cancelled();
   }
   private failExpiredUncertain(): void {
@@ -230,23 +235,32 @@ export class TurnEngine {
         consumeTurnInbox(this.ctx, turn.id);
     }
   }
-  private async stopActive(): Promise<void> {
+  private async stopActive(
+    event: Extract<ChannelEvent, { kind: "generation-stopped" }>,
+  ): Promise<void> {
     const turn = activeTurn(this.ctx);
-    if (turn) {
-      this.ctx.store.setCursor(`user-stop/${turn.id}`, "1");
-      this.ctx.store.setCursor("stop-pending", "1");
-    }
+    if (
+      !turn ||
+      turnDraftId(turn) !== event.messageId ||
+      this.ctx.store.getCursor(`user-stop/${turn.id}`) === "1"
+    )
+      return;
+    this.ctx.store.setCursor(`user-stop/${turn.id}`, "1");
+    this.ctx.store.setCursor("stop-pending", "1");
+    await this.pump();
     await this.statuses.cancelled();
   }
-  private async prepareStop(): Promise<void> {
-    for (const turn of this.ctx.store.listTurns([
-      "submitting",
-      "active",
-      "uncertain",
-    ]))
-      if (turn.entityId === this.ctx.entityId)
-        this.ctx.store.setCursor(`user-stop/${turn.id}`, "1");
-    await this.statuses.cancelled();
+  private async settleStopped(active: Turn | undefined): Promise<boolean> {
+    let interrupted = false;
+    if (
+      active?.externalTurnId &&
+      this.ctx.store.getCursor("stop-pending") === "1"
+    ) {
+      await this.ctx.adapter.interrupt(active.externalTurnId);
+      this.ctx.store.setCursor("stop-pending", "0");
+      interrupted = true;
+    }
+    return !(await this.statuses.cancelled()) || interrupted;
   }
   private async pump(): Promise<void> {
     if (!this.ctx.adapterReady) {
@@ -255,16 +269,10 @@ export class TurnEngine {
     }
     if (await this.pendingSecretInterrupt()) return;
     const active = activeTurn(this.ctx);
-    if (
-      active?.externalTurnId &&
-      this.ctx.store.getCursor("stop-pending") === "1"
-    ) {
-      await this.ctx.adapter.interrupt(active.externalTurnId);
-      this.ctx.store.setCursor("stop-pending", "0");
-      return;
-    }
+    if (await this.settleStopped(active)) return;
     if (active) {
-      await this.steer(active);
+      if (this.ctx.store.getCursor(`user-stop/${active.id}`) !== "1")
+        await this.steer(active);
       return;
     }
     if (this.ctx.store.getCursor("stop-pending") === "1")

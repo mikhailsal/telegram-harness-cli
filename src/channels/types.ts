@@ -54,5 +54,6 @@ export interface DeliveryResult {
 }
 export interface SendOptions {
   replyToMessageId?: number;
+  fallbackReplyToMessageId?: number;
   silent?: boolean;
 }

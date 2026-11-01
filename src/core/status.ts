@@ -4,6 +4,7 @@ import type { Turn } from "../store/index.js";
 import type { RuntimeContext } from "./context.js";
 import { activeTurn } from "./events.js";
 import { nextQueuedTurn } from "./queue.js";
+import { turnDraftId } from "./turn-draft.js";
 
 interface Activity {
   kind: "thinking" | "command" | "read" | "file-change";
@@ -118,12 +119,12 @@ export class TurnStatuses {
     if (old) return old;
     const chat = this.ctx.store.getCursor("chat-id");
     if (!chat || this.ctx.config.status === "off") return;
+    if (this.ctx.config.status === "draft")
+      this.ctx.store.setCursor(`status-draft/${turn.id}`, "1");
     const status = new ChannelStatus(
       this.ctx.channel,
       Number(chat),
-      Math.abs(
-        turn.createdAt.length + Number.parseInt(turn.id.slice(0, 6), 16),
-      ),
+      turnDraftId(turn),
       this.ctx.transient,
       `status/${turn.id}`,
       this.ctx.config.status,
@@ -141,19 +142,51 @@ export class TurnStatuses {
       .some((row) => row.turnId === id && row.chunk >= 0);
     if (!delivered) this.rows.get(id)?.resume();
   }
-  async remove(id: string): Promise<void> {
-    await this.rows.get(id)?.stop();
+  async remove(
+    id: string,
+    draft: "preserve" | "discard" | "recover" = "discard",
+  ): Promise<boolean> {
+    if ((await this.rows.get(id)?.stop(draft)) === false) return false;
     this.rows.delete(id);
+    if (draft !== "preserve")
+      this.ctx.store.setCursor(`status-draft/${id}`, "");
+    return true;
   }
-  async cancelled(): Promise<void> {
-    for (const id of this.rows.keys())
+  private recoverCancelled(): Set<string> {
+    const recovered = new Set<string>();
+    for (const turn of this.ctx.store.listTurns([
+      "submitting",
+      "active",
+      "uncertain",
+      "cancelled",
+    ])) {
       if (
-        this.ctx.store.getTurn(id)?.status === "cancelled" ||
+        turn.entityId !== this.ctx.entityId ||
+        this.rows.has(turn.id) ||
+        this.ctx.store.getCursor(`user-stop/${turn.id}`) !== "1" ||
+        this.ctx.store.getCursor(`status-draft/${turn.id}`) !== "1"
+      )
+        continue;
+      this.status(turn)?.update(this.text(turn, this.ctx.now().getTime()));
+      recovered.add(turn.id);
+    }
+    return recovered;
+  }
+  async cancelled(): Promise<boolean> {
+    const recovered = this.recoverCancelled();
+    let cleared = true;
+    for (const id of this.rows.keys()) {
+      const turn = this.ctx.store.getTurn(id);
+      if (
+        turn?.status === "cancelled" ||
         this.ctx.store.getCursor(`user-stop/${id}`) === "1"
       )
-        await this.remove(id);
+        if (!(await this.remove(id, recovered.has(id) ? "recover" : "discard")))
+          cleared = false;
+    }
+    return cleared;
   }
   async close(): Promise<void> {
-    for (const id of this.rows.keys()) await this.remove(id);
+    for (const id of this.rows.keys()) await this.remove(id, "preserve");
   }
 }

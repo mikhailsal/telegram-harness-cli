@@ -5,22 +5,25 @@ import {
   classifyTelegramError,
   renderOutgoing,
 } from "../channels/index.js";
-import type { RenderChunk } from "../channels/index.js";
+import type { RenderChunk, SendOptions } from "../channels/index.js";
 import type { Outbox, OutboxInput, Turn } from "../store/index.js";
 import type { RuntimeContext } from "./context.js";
 import { replyTarget } from "./reply-target.js";
+import { turnDraftId } from "./turn-draft.js";
 
 const chunkSchema = z.strictObject({
   kind: z.enum(["message", "file"]),
   text: z.string(),
   plain: z.string(),
   author: z.enum(["assistant", "system", "user"]).optional(),
+  automaticReply: z.boolean().optional(),
 });
 type Chunk = z.infer<typeof chunkSchema>;
 type TerminalStatus = "completed" | "failed" | "cancelled" | "interrupted";
 interface FinishOptions {
   silent?: boolean;
   replyToMessageId?: number;
+  automaticReply?: boolean;
 }
 function fallbackText(context: RuntimeContext, status: TerminalStatus): string {
   const { config, store } = context;
@@ -96,6 +99,10 @@ export class Delivery {
       options.replyToMessageId ?? replyTarget(this.context.store, turn, chatId);
     return {
       ...options,
+      ...(options.replyToMessageId === undefined &&
+      replyToMessageId !== undefined
+        ? { automaticReply: true }
+        : {}),
       ...(replyToMessageId === undefined ? {} : { replyToMessageId }),
     };
   }
@@ -111,7 +118,12 @@ export class Delivery {
       chunk: index,
       chatId,
       text: chunk.text,
-      payload: JSON.stringify(chunk),
+      payload: JSON.stringify({
+        ...chunk,
+        ...(index === 0 && options.automaticReply
+          ? { automaticReply: true }
+          : {}),
+      }),
       format: chunk.kind === "file" ? "document" : "rich",
       createdAt: this.context.now().toISOString(),
       disableNotification: index > 0 || chunk.kind === "file",
@@ -185,14 +197,14 @@ export class Delivery {
       this.notifyFailure(row);
       return;
     }
+    const { automaticReply, ...renderedChunk } = chunk;
     let delivered: Awaited<ReturnType<typeof channel.deliverChunk>>;
     try {
-      delivered = await channel.deliverChunk(row.chatId, chunk, {
-        silent: row.disableNotification,
-        ...(row.replyToMessageId === null
-          ? {}
-          : { replyToMessageId: row.replyToMessageId }),
-      });
+      delivered = await channel.deliverChunk(
+        row.chatId,
+        renderedChunk,
+        this.sendOptions(row, chunk, automaticReply),
+      );
       if (delivered.messageIds[0] === undefined) {
         store.markFailed(row.id, "missing-message-id");
         this.notifyFailure(row);
@@ -208,6 +220,28 @@ export class Delivery {
       delivered.messageIds[0],
       delivered.visibleText,
     );
+  }
+  private sendOptions(
+    row: Outbox,
+    chunk: Chunk,
+    automaticReply: boolean | undefined,
+  ): SendOptions {
+    const turn = automaticReply
+      ? this.context.store.getTurn(row.turnId)
+      : undefined;
+    const replacesDraft =
+      turn &&
+      chunk.kind === "message" &&
+      this.context.channel.hasDraft(row.chatId, turnDraftId(turn));
+    return {
+      silent: row.disableNotification,
+      ...(replacesDraft && row.replyToMessageId !== null
+        ? { fallbackReplyToMessageId: row.replyToMessageId }
+        : {}),
+      ...(row.replyToMessageId === null || replacesDraft
+        ? {}
+        : { replyToMessageId: row.replyToMessageId }),
+    };
   }
   private async record(
     row: Outbox,

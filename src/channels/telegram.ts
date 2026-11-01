@@ -31,6 +31,10 @@ export class TelegramChannel {
   readonly bot: Bot;
   private readonly allowed: Set<string>;
   private readonly options: TelegramChannelOptions;
+  private readonly drafts = new Map<
+    string,
+    { id: number; expiresAt: number }
+  >();
   constructor(options: TelegramChannelOptions) {
     this.options = options;
     this.allowed = new Set(options.allowedUserIds.map(String));
@@ -40,7 +44,7 @@ export class TelegramChannel {
         ...(options.fetch ? { fetch: options.fetch } : {}),
       },
     });
-    this.bot.api.config.use((prev, method, payload, signal) => {
+    this.bot.api.config.use(async (prev, method, payload, signal) => {
       const deadline = AbortSignal.timeout(
         method === "getUpdates" ? 55000 : 30000,
       );
@@ -50,12 +54,29 @@ export class TelegramChannel {
         ...(signal ? [signal as unknown as AbortSignal] : []),
       ];
       // grammY ships a structurally incompatible AbortSignal declaration; Node supplies the runtime signal.
-      return prev(
+      const result = await prev(
         method,
         payload,
         AbortSignal.any(signals) as unknown as typeof signal,
       );
+      if (result.ok) this.trackDraft(method, payload);
+      return result;
     });
+  }
+  private trackDraft(method: string, payload: unknown): void {
+    if (!payload || typeof payload !== "object" || !("chat_id" in payload))
+      return;
+    const chatId = String(payload.chat_id);
+    if (method === "sendRichMessageDraft" && "draft_id" in payload)
+      this.drafts.set(chatId, {
+        id: Number(payload.draft_id),
+        expiresAt: Date.now() + 30000,
+      });
+    else if (method === "sendRichMessage") this.drafts.delete(chatId);
+  }
+  hasDraft(chatId: string, draftId: number): boolean {
+    const draft = this.drafts.get(chatId);
+    return draft?.id === draftId && draft.expiresAt > Date.now();
   }
   downloadSignal(): AbortSignal {
     const signals = [
@@ -142,7 +163,12 @@ export class TelegramChannel {
         ? { reply_parameters: { message_id: options.replyToMessageId } }
         : {}),
     };
-    const delivered = await this.sendChunk(chatId, chunk, extra);
+    const delivered = await this.sendChunk(
+      chatId,
+      chunk,
+      extra,
+      options.fallbackReplyToMessageId,
+    );
     return { messageIds: [delivered.id], visibleText: delivered.text };
   }
   private async sendChunk(
@@ -152,6 +178,7 @@ export class TelegramChannel {
       disable_notification: boolean;
       reply_parameters?: { message_id: number };
     },
+    fallbackReplyToMessageId?: number,
   ): Promise<{ id: number; text: string }> {
     if (chunk.kind === "file") {
       const message = await this.bot.api.sendDocument(
@@ -170,12 +197,18 @@ export class TelegramChannel {
       return { id: message.message_id, text: chunk.plain };
     } catch (error) {
       if (classifyTelegramError(error).kind !== "bad-request") throw error;
+      const fallback = {
+        ...extra,
+        ...(fallbackReplyToMessageId === undefined
+          ? {}
+          : { reply_parameters: { message_id: fallbackReplyToMessageId } }),
+      };
       try {
         if (chunk.plain.length > 4096) throw error;
         const message = await this.bot.api.sendMessage(
           chatId,
           chunk.plain,
-          extra,
+          fallback,
         );
         return { id: message.message_id, text: chunk.plain };
       } catch (plainError) {
@@ -184,7 +217,7 @@ export class TelegramChannel {
         const message = await this.bot.api.sendDocument(
           chatId,
           new InputFile(Buffer.from(chunk.text), "response.md"),
-          { ...extra, disable_notification: true },
+          { ...fallback, disable_notification: true },
         );
         return { id: message.message_id, text: chunk.text };
       }
@@ -212,13 +245,13 @@ export class TelegramChannel {
     );
   }
   async menu(): Promise<void> {
-    for (const language of ["ru", "en"] as const) {
-      const strings = catalog[language];
+    for (const language of [undefined, "ru", "en"] as const) {
+      const strings = catalog[language ?? "en"];
       await this.bot.api.setMyCommands(
         (["stop", "status", "new", "mode", "compact", "help"] as const).map(
           (command) => ({ command, description: strings[command] }),
         ),
-        { language_code: language },
+        language ? { language_code: language } : {},
       );
     }
   }

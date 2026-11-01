@@ -109,7 +109,7 @@ it("retains the old durable session if creation of a replacement fails", async (
     await running;
   }
 });
-it("registers both command menus without contacting an external service", async () => {
+it("registers default and localized command menus without contacting an external service", async () => {
   const fake = new FakeChannel();
   const adapter = new FakeAdapter();
   const controller = new AbortController();
@@ -120,8 +120,8 @@ it("registers both command menus without contacting an external service", async 
     tickIntervalMs: 20,
   });
   try {
-    await waitFor(() => fake.menus.length === 2);
-    expect(fake.menus).toEqual(["en", "ru"]);
+    await waitFor(() => fake.menus.length === 3);
+    expect(fake.menus).toEqual([undefined, "en", "ru"]);
   } finally {
     controller.abort();
     await running;

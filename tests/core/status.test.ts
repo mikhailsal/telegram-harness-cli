@@ -23,7 +23,7 @@ function setup() {
       sandbox: "read-only",
       stall_timeout: 5,
     }),
-    channel: { draft },
+    channel: { draft, hasDraft: () => false },
     transient: { remove: vi.fn().mockResolvedValue(undefined) },
   } as unknown as RuntimeContext;
   store.putEntity({

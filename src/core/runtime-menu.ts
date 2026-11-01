@@ -3,8 +3,8 @@ import type { RuntimeContext } from "./context.js";
 
 export async function registerMenus(ctx: RuntimeContext): Promise<void> {
   try {
-    for (const language of ["en", "ru"] as const) {
-      const text = catalog[language];
+    for (const language of [undefined, "en", "ru"] as const) {
+      const text = catalog[language ?? "en"];
       const commands = [
         "stop",
         "status",
@@ -16,7 +16,7 @@ export async function registerMenus(ctx: RuntimeContext): Promise<void> {
       const signal = AbortSignal.any([ctx.signal, AbortSignal.timeout(30000)]);
       await ctx.channel.bot.api.setMyCommands(
         commands.map((command) => ({ command, description: text[command] })),
-        { language_code: language },
+        language ? { language_code: language } : {},
         signal as unknown as Parameters<
           typeof ctx.channel.bot.api.setMyCommands
         >[2],

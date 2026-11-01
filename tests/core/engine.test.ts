@@ -98,12 +98,21 @@ function fakeConfig() {
     status: "off",
   });
 }
+function fakeChannel(services: ReturnType<typeof fakeServices>) {
+  return {
+    hasDraft: () => false,
+    deliverChunk: services.deliverChunk,
+    answerCallback: services.answerCallback,
+    bot: { api: { sendMessage: services.sendMessage } },
+  };
+}
 function setup() {
   const root = mkdtempSync(join(tmpdir(), "thc-engine-"));
   roots.push(root);
   const store = openStore(join(root, "store.sqlite"));
   const now = new Date("2026-10-31T12:00:00Z");
   seedStore(store, root, now);
+  const services = fakeServices();
   const {
     adapter,
     submit,
@@ -113,7 +122,7 @@ function setup() {
     rotateSession,
     answerCallback,
     sendMessage,
-  } = fakeServices();
+  } = services;
   const context = {
     directory: root,
     config: fakeConfig(),
@@ -123,7 +132,7 @@ function setup() {
     sessionId: "session",
     adapterReady: true,
     now: () => now,
-    channel: { deliverChunk, answerCallback, bot: { api: { sendMessage } } },
+    channel: fakeChannel(services),
     transient,
     files: { download },
     notice: {},
@@ -132,8 +141,7 @@ function setup() {
     persistAdapter: vi.fn(),
     rotateSession,
   } as unknown as RuntimeContext;
-  const delivery = new Delivery(context);
-  const engine = new TurnEngine(context, delivery);
+  const engine = new TurnEngine(context, new Delivery(context));
   return {
     root,
     store,

@@ -27,12 +27,19 @@ artifact digests are checked again after the runs. Failed or partial records can
 workspace is removed after each run; the new Codex sessions follow the normal
 Codex retention policy.
 
-Before tagging, use a separate test bot and phone for this manual checklist:
+Before tagging, use a separate test bot in a Telegram client for this manual checklist:
 
 - Verify rich text, long answers, code blocks and a large code attachment.
 - Verify the draft appears, its stop button works, and it restarts after a card.
   Check its native thinking animation while the task runs.
   It must disappear immediately with the final answer, without a lingering timer.
+- Run a delayed task and send `/stop`: the preview must disappear without an AI
+  answer or a lasting acknowledgement. Repeat with the native stop button.
+  Check `/stop` in the command menu, including a client language other than
+  English or Russian.
+- Queue two messages: each answer must replace its preview without a redundant
+  reply quote when it appears immediately below its question. Preserve the
+  original message times; keep quotes when an answer needs a source reference.
 - Tap both approval choices, check the collapsed details and stale-button toast.
 - Check a question, a reaction, a reply and a forwarded message.
 - Send a photo, album, voice note and document; verify captions and local paths.
@@ -47,6 +54,6 @@ the record; the tag verifier does the same, so it needs the same Node and npm
 versions and access to the locked packages. It creates an annotated local version tag
 containing the record and does not push it. The tag workflow checks that the
 annotation matches the tagged commit and was fresh at tag creation. The record
-is an operator attestation, not a cryptographic proof that a model or phone
+is an operator attestation, not a cryptographic proof that a model or client
 check was performed. The package is currently private; this workflow does not
 publish it to npm.

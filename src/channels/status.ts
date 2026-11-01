@@ -22,6 +22,7 @@ export class ChannelStatus {
   private paused = false;
   private retryAt = 0;
   private repostCheckAt = 0;
+  private recoveredUntil = 0;
   constructor(
     channel: TelegramChannel,
     chatId: number,
@@ -200,9 +201,50 @@ export class ChannelStatus {
     this.paused = false;
     this.update(this.text, true);
   }
-  async stop(): Promise<void> {
+  private async discardDraft(recovered: boolean): Promise<boolean> {
+    const now = this.now().getTime();
+    if (recovered && !this.recoveredUntil) this.recoveredUntil = now + 30000;
+    if (
+      !this.channel.hasDraft(String(this.chatId), this.draftId) &&
+      this.recoveredUntil <= now
+    )
+      return true;
+    const send = async (): Promise<number> =>
+      (
+        await this.channel.bot.api.sendRichMessage(
+          this.chatId,
+          { blocks: [{ type: "paragraph", text: this.text }] },
+          { disable_notification: true },
+        )
+      ).message_id;
+    try {
+      if (this.transient && this.transientId) {
+        const id = `${this.transientId}/discard`;
+        const messageId = await this.transient.create(
+          {
+            id,
+            kind: "status",
+            chatId: String(this.chatId),
+            createdAt: this.now().toISOString(),
+            expiresAt: new Date(now + 30000).toISOString(),
+          },
+          send,
+        );
+        if (messageId === undefined) return false;
+        await this.transient.remove(id);
+      } else this.messageId = await send();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  async stop(
+    draft: "preserve" | "discard" | "recover" = "preserve",
+  ): Promise<boolean> {
     this.stopped = true;
     await this.pause();
+    if (draft !== "preserve" && !(await this.discardDraft(draft === "recover")))
+      return false;
     if (this.transient && this.transientId)
       await this.transient.remove(this.transientId);
     else if (this.messageId !== undefined) {
@@ -213,5 +255,6 @@ export class ChannelStatus {
       }
     }
     this.messageId = undefined;
+    return true;
   }
 }
