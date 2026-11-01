@@ -18,7 +18,7 @@ it("closes a native preview on typed stop without persisting an answer or acknow
     expect(f.api.visible).toBe(false);
     expect(f.api.messages.size).toBe(0);
     expect(f.api.calls).toContain("sendRichMessage");
-    expect(f.store.listTransients()).toHaveLength(1); // Only the user's command.
+    expect(f.store.listTransients()).toHaveLength(0);
     expect(f.store.listOutbox(["pending", "sending", "sent"])).toHaveLength(0);
     await f.engine.event({
       kind: "turn-completed",

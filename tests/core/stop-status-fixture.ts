@@ -88,7 +88,10 @@ function seedTurn(
     source: "telegram",
     createdAt: now().toISOString(),
   });
-  store.transitionTurn(id, "queued", "active", { externalTurnId: "turn" });
+  store.transitionTurn(id, "queued", "active", {
+    sessionId: "s",
+    externalTurnId: "turn",
+  });
   store.setCursor("chat-id", "1");
   return id;
 }

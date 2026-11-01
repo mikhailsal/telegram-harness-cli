@@ -228,7 +228,7 @@ async function expireCommands(f: Awaited<ReturnType<typeof fixture>>) {
     () =>
       transients(f.root).filter(
         (row) => row.kind === "command" && row.messageId !== null,
-      ).length === 2 && hasTransient(f.root, "welcome"),
+      ).length === 1 && hasTransient(f.root, "welcome"),
   );
   const original = transients(f.root);
   const commands = original
@@ -243,9 +243,10 @@ async function expireCommands(f: Awaited<ReturnType<typeof fixture>>) {
       !transients(f.root).some((row) => row.kind === "command"),
   );
   expect(transients(f.root).map((row) => row.kind)).toEqual(["welcome"]);
+  expect(deleted(f.server.calls, [1])).toBe(false);
   return welcome;
 }
-it("expires commands and welcome while renewing an active status after process restarts", async () => {
+it("preserves the command and expires bot notices while renewing active status across restarts", async () => {
   const f = await fixture();
   const welcome = await expireCommands(f);
   f.server.input(2, "long running task");
@@ -277,6 +278,7 @@ it("expires commands and welcome while renewing an active status after process r
       deleted(f.server.calls, [renewed?.messageId]) &&
       !hasTransient(f.root, "status"),
   );
+  expect(deleted(f.server.calls, [1])).toBe(false);
 }, 30000);
 
 it("silently drops group updates and reveals only a stranger's ID over the real local Bot API", async () => {

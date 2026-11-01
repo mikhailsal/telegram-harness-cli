@@ -1,5 +1,6 @@
 import type { AdapterEvent } from "../contract.ts";
 import type { Item, Turn } from "./schema.ts";
+import { itemProgress } from "./progress.ts";
 
 function event(
   sessionId: string,
@@ -37,6 +38,10 @@ export function historyEvents(sessionId: string, turn: Turn): AdapterEvent[] {
   for (const item of turn.items) {
     const normalized = itemEvent(sessionId, turn.id, item);
     if (normalized) events.push(normalized);
+    if (item.type === "contextCompaction") {
+      const progress = itemProgress(sessionId, turn.id, item);
+      if (progress) events.push(progress);
+    }
   }
   if (turn.status !== "inProgress")
     events.push({

@@ -81,7 +81,7 @@ export interface OutboxInput {
   chatId: string;
   text: string;
   createdAt: string;
-  format?: "rich" | "plain" | "document";
+  format?: "rich" | "plain" | "html" | "document";
   fileName?: string | null;
   payload?: string | null;
   replyToMessageId?: number | null;
@@ -93,7 +93,7 @@ export type Outbox = OutboxInput & {
   error: string | null;
   possiblyDuplicated: boolean;
   retryUsed: boolean;
-  format: "rich" | "plain" | "document";
+  format: "rich" | "plain" | "html" | "document";
   fileName: string | null;
   payload: string | null;
   replyToMessageId: number | null;

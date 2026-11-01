@@ -91,12 +91,28 @@ it("exposes edit, deletion, callback, typing, draft and default plus localized m
     "setMyCommands",
     "setMyCommands",
     "setMyCommands",
+    "setMyCommands",
+    "setMyCommands",
+    "setMyCommands",
   ]);
   expect(api.calls[4]?.body.can_stop).toBe(true);
-  expect(api.calls.slice(-3).map((call) => call.body.language_code)).toEqual([
+  for (const call of api.calls.slice(-6))
+    expect(JSON.stringify(call.body.commands)).toContain('"command":"format"');
+  expect(api.calls.slice(-6).map((call) => call.body.language_code)).toEqual([
     undefined,
     "ru",
     "en",
+    undefined,
+    "ru",
+    "en",
+  ]);
+  expect(api.calls.slice(-6).map((call) => call.body.scope)).toEqual([
+    undefined,
+    undefined,
+    undefined,
+    { type: "all_private_chats" },
+    { type: "all_private_chats" },
+    { type: "all_private_chats" },
   ]);
 });
 it("pairs an animated thinking preview with rich final delivery and keeps its text literal", async () => {

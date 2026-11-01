@@ -188,6 +188,14 @@ export class TransientManager {
     }
   }
   async remove(id: string): Promise<void> {
+    if (id.startsWith("command-input/")) {
+      for (const row of this.store.listTransients()) {
+        if (row.id !== id && !row.id.startsWith(`${id}/repost/`)) continue;
+        this.store.deleteTransient(row.id);
+        this.store.setCursor(`transient-retry/${row.id}`, "");
+      }
+      return;
+    }
     await this.cleanupReposts(id);
     const rows = this.store.listTransients();
     const row = rows.find((item) => item.id === id);

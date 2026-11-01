@@ -8,6 +8,8 @@ import { consumeTurnInbox } from "./queue.js";
 import { PendingManager } from "./pending.js";
 import { completionStatus, completionText } from "./results.js";
 import { acceptReaction } from "./interactions.js";
+import { messageFormat } from "./format.js";
+import { isCompactionOnly, observeCompaction } from "./compaction.js";
 export { queueRequestSummaries } from "./request-summary.js";
 
 export function activeTurn(
@@ -41,6 +43,7 @@ export class AdapterEvents {
     }
     const turn = this.findTurn(event);
     if (!turn) return;
+    observeCompaction(this.ctx, turn, event);
     if (
       event.kind === "approval-requested" ||
       event.kind === "question-requested"
@@ -140,7 +143,9 @@ export class AdapterEvents {
       externalTurnId,
       updatedAt: now,
     });
-    return this.ctx.store.getTurn(id);
+    const turn = this.ctx.store.getTurn(id);
+    if (turn) messageFormat(this.ctx, turn);
+    return turn;
   }
   private input(event: AdapterEvent, turn: Turn): void {
     acceptReaction(this.ctx, turn.id);
@@ -234,8 +239,32 @@ export class AdapterEvents {
     }
     if (await this.completeUserStop(turn)) return;
     const status = completionStatus(event);
+    if (isCompactionOnly(this.ctx, turn)) {
+      await this.completeCompaction(turn, status);
+      return;
+    }
     const message = completionText(this.ctx, turn, event, status);
     if (this.delivery.finish(turn, status, message)) {
+      consumeTurnInbox(this.ctx, turn.id);
+      await this.pending.cancelTurn(turn.id);
+      this.completeFollowups(turn, status);
+    }
+  }
+  private async completeCompaction(
+    turn: Turn,
+    status: "completed" | "failed" | "interrupted",
+  ): Promise<void> {
+    const language =
+      this.ctx.store.getCursor("language") === "ru" ? "ru" : "en";
+    const success = status === "completed";
+    if (
+      this.delivery.finish(
+        turn,
+        status,
+        success ? "" : catalog[language].compactFailed,
+        { silent: success },
+      )
+    ) {
       consumeTurnInbox(this.ctx, turn.id);
       await this.pending.cancelTurn(turn.id);
       this.completeFollowups(turn, status);

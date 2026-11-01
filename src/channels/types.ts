@@ -1,4 +1,5 @@
 export type Language = "ru" | "en";
+export type TelegramMessageFormat = "rich" | "regular";
 export interface ChannelAttachment {
   kind: "photo" | "document" | "voice" | "audio" | "video";
   fileId: string;
@@ -56,4 +57,5 @@ export interface SendOptions {
   replyToMessageId?: number;
   fallbackReplyToMessageId?: number;
   silent?: boolean;
+  format?: TelegramMessageFormat;
 }

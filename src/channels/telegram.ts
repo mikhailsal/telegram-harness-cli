@@ -2,12 +2,15 @@ import { Bot, GrammyError, InputFile } from "grammy";
 import { catalog } from "./catalog.js";
 import { parseUpdate } from "./ingress.js";
 import { renderOutgoing } from "./render.js";
+import { LocalMediaError, mediaBytes } from "./render-media.js";
+import { DraftLedger } from "./draft-ledger.js";
 import type { RenderChunk } from "./render.js";
 import type {
   ChannelPollResult,
   DeliveryResult,
   SendOptions,
   TelegramChannelOptions,
+  TelegramMessageFormat,
 } from "./types.js";
 
 export type TelegramErrorKind =
@@ -16,6 +19,7 @@ export function classifyTelegramError(error: unknown): {
   kind: TelegramErrorKind;
   retryAfter?: number;
 } {
+  if (error instanceof LocalMediaError) return { kind: "other" };
   if (!(error instanceof GrammyError)) return { kind: "network" };
   if (error.error_code === 429)
     return {
@@ -27,14 +31,14 @@ export function classifyTelegramError(error: unknown): {
   if (error.error_code >= 500) return { kind: "server" };
   return { kind: "other" };
 }
+function isLocalMedia(chunk: RenderChunk): boolean {
+  return chunk.kind === "photo" || chunk.kind === "document";
+}
 export class TelegramChannel {
   readonly bot: Bot;
   private readonly allowed: Set<string>;
   private readonly options: TelegramChannelOptions;
-  private readonly drafts = new Map<
-    string,
-    { id: number; expiresAt: number }
-  >();
+  private readonly drafts = new DraftLedger();
   constructor(options: TelegramChannelOptions) {
     this.options = options;
     this.allowed = new Set(options.allowedUserIds.map(String));
@@ -59,24 +63,16 @@ export class TelegramChannel {
         payload,
         AbortSignal.any(signals) as unknown as typeof signal,
       );
-      if (result.ok) this.trackDraft(method, payload);
+      if (result.ok) this.drafts.track(method, payload);
       return result;
     });
   }
-  private trackDraft(method: string, payload: unknown): void {
-    if (!payload || typeof payload !== "object" || !("chat_id" in payload))
-      return;
-    const chatId = String(payload.chat_id);
-    if (method === "sendRichMessageDraft" && "draft_id" in payload)
-      this.drafts.set(chatId, {
-        id: Number(payload.draft_id),
-        expiresAt: Date.now() + 30000,
-      });
-    else if (method === "sendRichMessage") this.drafts.delete(chatId);
-  }
-  hasDraft(chatId: string, draftId: number): boolean {
-    const draft = this.drafts.get(chatId);
-    return draft?.id === draftId && draft.expiresAt > Date.now();
+  hasDraft(
+    chatId: string,
+    draftId: number,
+    format?: TelegramMessageFormat,
+  ): boolean {
+    return this.drafts.has(chatId, draftId, format);
   }
   downloadSignal(): AbortSignal {
     const signals = [
@@ -125,7 +121,12 @@ export class TelegramChannel {
     markdown: string,
     options: SendOptions = {},
   ): Promise<DeliveryResult> {
-    const rendered = renderOutgoing(markdown, this.options.hiddenTags);
+    const rendered = renderOutgoing(
+      markdown,
+      this.options.hiddenTags,
+      undefined,
+      options.format,
+    );
     const chunks = rendered.chunks.length
       ? rendered.chunks
       : [
@@ -133,6 +134,7 @@ export class TelegramChannel {
             kind: "message" as const,
             text: catalog[this.options.language ?? "en"].empty,
             plain: catalog[this.options.language ?? "en"].empty,
+            ...(options.format === "regular" ? { style: "html" as const } : {}),
           },
         ];
     const ids: number[] = [],
@@ -180,6 +182,7 @@ export class TelegramChannel {
     },
     fallbackReplyToMessageId?: number,
   ): Promise<{ id: number; text: string }> {
+    if (isLocalMedia(chunk)) return this.sendLocalMedia(chatId, chunk, extra);
     if (chunk.kind === "file") {
       const message = await this.bot.api.sendDocument(
         chatId,
@@ -188,6 +191,7 @@ export class TelegramChannel {
       );
       return { id: message.message_id, text: chunk.text };
     }
+    if (chunk.style === "html") return this.sendHtml(chatId, chunk, extra);
     try {
       const message = await this.bot.api.sendRichMessage(
         chatId,
@@ -223,6 +227,67 @@ export class TelegramChannel {
       }
     }
   }
+  private async sendHtml(
+    chatId: string,
+    chunk: RenderChunk,
+    extra: {
+      disable_notification: boolean;
+      reply_parameters?: { message_id: number };
+    },
+  ): Promise<{ id: number; text: string }> {
+    try {
+      const message = await this.bot.api.sendMessage(chatId, chunk.text, {
+        ...extra,
+        parse_mode: "HTML",
+      });
+      return { id: message.message_id, text: chunk.plain };
+    } catch (error) {
+      if (classifyTelegramError(error).kind !== "bad-request") throw error;
+      const message = await this.bot.api.sendMessage(
+        chatId,
+        chunk.plain,
+        extra,
+      );
+      return { id: message.message_id, text: chunk.plain };
+    }
+  }
+  private async sendLocalMedia(
+    chatId: string,
+    chunk: RenderChunk,
+    extra: {
+      disable_notification: boolean;
+      reply_parameters?: { message_id: number };
+    },
+  ): Promise<{ id: number; text: string }> {
+    if (!chunk.workspace || !chunk.filePath || !chunk.fileName || !chunk.digest)
+      throw new LocalMediaError("invalid-local-file");
+    const bytes = mediaBytes(chunk.workspace, {
+      kind: chunk.kind === "photo" ? "photo" : "document",
+      filePath: chunk.filePath,
+      fileName: chunk.fileName,
+      digest: chunk.digest,
+    });
+    const caption = Array.from(chunk.plain).slice(0, 1024).join("");
+    const mediaOptions = caption ? { ...extra, caption } : extra;
+    if (chunk.kind === "photo") {
+      try {
+        const message = await this.bot.api.sendPhoto(
+          chatId,
+          new InputFile(bytes, chunk.fileName),
+          mediaOptions,
+        );
+        return { id: message.message_id, text: caption };
+      } catch (error) {
+        if (classifyTelegramError(error).kind !== "bad-request") throw error;
+      }
+    }
+    const message = await this.bot.api.sendDocument(
+      chatId,
+      new InputFile(bytes, chunk.fileName),
+      mediaOptions,
+    );
+    return { id: message.message_id, text: caption };
+  }
   async edit(chatId: string, messageId: number, text: string): Promise<void> {
     await this.bot.api.editMessageText(chatId, messageId, text);
   }
@@ -235,7 +300,18 @@ export class TelegramChannel {
   async typing(chatId: string): Promise<void> {
     await this.bot.api.sendChatAction(chatId, "typing");
   }
-  async draft(chatId: number, draftId: number, text: string): Promise<void> {
+  async draft(
+    chatId: number,
+    draftId: number,
+    text: string,
+    format: TelegramMessageFormat = "rich",
+  ): Promise<void> {
+    if (format === "regular") {
+      await this.bot.api.sendMessageDraft(chatId, draftId, text, {
+        can_stop: true,
+      });
+      return;
+    }
     // Match rich final delivery so Telegram consumes the preview immediately.
     await this.bot.api.sendRichMessageDraft(
       chatId,
@@ -244,15 +320,49 @@ export class TelegramChannel {
       { can_stop: true },
     );
   }
+  async finalizeDraft(
+    chatId: number,
+    draftId: number,
+    text: string,
+    format: TelegramMessageFormat,
+  ): Promise<number> {
+    if (!Number.isSafeInteger(draftId) || draftId <= 0)
+      throw new Error("Invalid draft ID");
+    if (format === "regular")
+      return (
+        await this.bot.api.sendMessage(chatId, text, {
+          disable_notification: true,
+        })
+      ).message_id;
+    return (
+      await this.bot.api.sendRichMessage(
+        chatId,
+        { blocks: [{ type: "paragraph", text }] },
+        { disable_notification: true },
+      )
+    ).message_id;
+  }
   async menu(): Promise<void> {
-    for (const language of [undefined, "ru", "en"] as const) {
-      const strings = catalog[language ?? "en"];
-      await this.bot.api.setMyCommands(
-        (["stop", "status", "new", "mode", "compact", "help"] as const).map(
-          (command) => ({ command, description: strings[command] }),
-        ),
-        language ? { language_code: language } : {},
-      );
-    }
+    for (const scope of [undefined, { type: "all_private_chats" as const }])
+      for (const language of [undefined, "ru", "en"] as const) {
+        const strings = catalog[language ?? "en"];
+        await this.bot.api.setMyCommands(
+          (
+            [
+              "stop",
+              "status",
+              "new",
+              "mode",
+              "format",
+              "compact",
+              "help",
+            ] as const
+          ).map((command) => ({ command, description: strings[command] })),
+          {
+            ...(language ? { language_code: language } : {}),
+            ...(scope ? { scope } : {}),
+          },
+        );
+      }
   }
 }

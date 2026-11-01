@@ -10,13 +10,19 @@ import type { Outbox, OutboxInput, Turn } from "../store/index.js";
 import type { RuntimeContext } from "./context.js";
 import { replyTarget } from "./reply-target.js";
 import { turnDraftId } from "./turn-draft.js";
+import { messageFormat } from "./format.js";
 
 const chunkSchema = z.strictObject({
-  kind: z.enum(["message", "file"]),
+  kind: z.enum(["message", "file", "photo", "document"]),
   text: z.string(),
   plain: z.string(),
   author: z.enum(["assistant", "system", "user"]).optional(),
   automaticReply: z.boolean().optional(),
+  style: z.literal("html").optional(),
+  filePath: z.string().optional(),
+  fileName: z.string().optional(),
+  digest: z.string().optional(),
+  workspace: z.string().optional(),
 });
 type Chunk = z.infer<typeof chunkSchema>;
 type TerminalStatus = "completed" | "failed" | "cancelled" | "interrupted";
@@ -41,7 +47,7 @@ function fallbackText(context: RuntimeContext, status: TerminalStatus): string {
 export class Delivery {
   private readonly context: RuntimeContext;
   private sending = false;
-  onSending: ((turnId: string) => Promise<void>) | undefined;
+  onSending: ((turnId: string) => Promise<boolean> | Promise<void>) | undefined;
   onSendFailed: ((turnId: string) => void) | undefined;
   onDelivered: ((turnId: string) => Promise<void>) | undefined;
   constructor(context: RuntimeContext) {
@@ -54,9 +60,13 @@ export class Delivery {
     options: FinishOptions = {},
   ): boolean {
     const { config, store } = this.context;
+    const chatId = this.chatId(turn.id);
+    const format = messageFormat(this.context, turn, chatId);
     let rendered = renderOutgoing(
       text,
       config.markup.tags.map((tag) => tag.name),
+      this.context.directory,
+      format,
     );
     if (rendered.unclosedTag) {
       store.setCursor(
@@ -68,14 +78,20 @@ export class Delivery {
     const fallback = fallbackText(this.context, status);
     const marker = config.non_tg_marker;
     if (turn.source !== "telegram" && rendered.visibleText.trim() === marker)
-      rendered = renderOutgoing(`${marker} ${fallback}`, []);
+      rendered = renderOutgoing(`${marker} ${fallback}`, [], undefined, format);
     const chunks = options.silent
       ? []
       : rendered.chunks.length
         ? rendered.chunks
-        : [{ kind: "message" as const, text: fallback, plain: fallback }];
+        : [
+            {
+              kind: "message" as const,
+              text: fallback,
+              plain: fallback,
+              ...(format === "regular" ? { style: "html" as const } : {}),
+            },
+          ];
     const result = options.silent ? "" : rendered.visibleText || fallback;
-    const chatId = this.chatId(turn.id);
     const rows = this.rows(
       turn,
       chunks,
@@ -124,9 +140,14 @@ export class Delivery {
           ? { automaticReply: true }
           : {}),
       }),
-      format: chunk.kind === "file" ? "document" : "rich",
+      format:
+        chunk.kind === "message"
+          ? chunk.style === "html"
+            ? "html"
+            : "rich"
+          : "document",
       createdAt: this.context.now().toISOString(),
-      disableNotification: index > 0 || chunk.kind === "file",
+      disableNotification: index > 0 || chunk.kind !== "message",
       ...(options.replyToMessageId === undefined || index > 0
         ? {}
         : { replyToMessageId: options.replyToMessageId }),
@@ -187,16 +208,11 @@ export class Delivery {
       row.nextAttemptAt > this.context.now().toISOString()
     )
       return;
-    if (row.chunk >= 0) await this.onSending?.(row.turnId);
-    if (!store.beginSend(row.id, this.context.now().toISOString())) return;
-    let chunk: Chunk;
-    try {
-      chunk = chunkSchema.parse(JSON.parse(row.payload ?? "null") as unknown);
-    } catch {
-      store.markFailed(row.id, "invalid-payload");
-      this.notifyFailure(row);
+    if (row.chunk >= 0 && (await this.onSending?.(row.turnId)) === false)
       return;
-    }
+    if (!store.beginSend(row.id, this.context.now().toISOString())) return;
+    const chunk = this.prepareChunk(row);
+    if (!chunk) return;
     const { automaticReply, ...renderedChunk } = chunk;
     let delivered: Awaited<ReturnType<typeof channel.deliverChunk>>;
     try {
@@ -221,6 +237,25 @@ export class Delivery {
       delivered.visibleText,
     );
   }
+  private prepareChunk(row: Outbox): Chunk | undefined {
+    try {
+      const chunk = chunkSchema.parse(
+        JSON.parse(row.payload ?? "null") as unknown,
+      );
+      if (this.validWorkspace(chunk)) return chunk;
+    } catch {
+      // Invalid JSON or payload has the same permanent failure as a bad workspace.
+    }
+    this.context.store.markFailed(row.id, "invalid-payload");
+    this.notifyFailure(row);
+    return undefined;
+  }
+  private validWorkspace(chunk: Chunk): boolean {
+    return (
+      (chunk.kind !== "photo" && chunk.kind !== "document") ||
+      chunk.workspace === this.context.directory
+    );
+  }
   private sendOptions(
     row: Outbox,
     chunk: Chunk,
@@ -232,7 +267,11 @@ export class Delivery {
     const replacesDraft =
       turn &&
       chunk.kind === "message" &&
-      this.context.channel.hasDraft(row.chatId, turnDraftId(turn));
+      this.context.channel.hasDraft(
+        row.chatId,
+        turnDraftId(turn),
+        chunk.style === "html" ? "regular" : "rich",
+      );
     return {
       silent: row.disableNotification,
       ...(replacesDraft && row.replyToMessageId !== null

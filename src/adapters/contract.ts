@@ -72,3 +72,9 @@ export class SteerRejectedError extends Error {
     this.name = "SteerRejectedError";
   }
 }
+export class CompactRejectedError extends Error {
+  constructor() {
+    super("Compaction was rejected by the harness");
+    this.name = "CompactRejectedError";
+  }
+}

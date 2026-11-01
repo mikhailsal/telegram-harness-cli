@@ -78,7 +78,7 @@ it("renders ephemeral progress, queue, stall and recovery states", async () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(draft.mock.lastCall?.[2]).toContain("reconnecting");
     ctx.adapterReady = true;
-    statuses.acknowledge();
+    await statuses.acknowledge();
     await vi.advanceTimersByTimeAsync(1000);
     expect(draft.mock.lastCall?.[2]).toContain("Follow-up received");
     expect(JSON.stringify(store.getTurn(id))).not.toContain(

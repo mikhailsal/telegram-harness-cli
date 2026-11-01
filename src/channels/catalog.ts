@@ -28,9 +28,22 @@ export const catalog = {
     new: "New conversation",
     mode: "Mode",
     compact: "Compact context",
+    format: "Message format",
+    formatRich: "Rich",
+    formatRegular: "Regular",
+    formatRichInfo:
+      "Rich: formatted blocks and tables. Telegram does not forward partial text quotes. Changes apply to the next turn.",
+    formatRegularInfo:
+      "Regular: basic formatting and partial text quotes; tables are text and long replies split at 4096 characters. Changes apply to the next turn.",
+    compacting: "⏳ Compacting context",
+    compactFailed: "⚠️ Context compaction failed. Details: thc doctor",
+    compactRejected:
+      "⚠️ Could not start context compaction. Details: thc doctor",
+    compactUncertain:
+      "⚠️ Compaction may have started. Check status before trying again.",
     help: "Help",
     welcome:
-      "Connected to Codex. Send a task, photo, or file. Commands are in the menu.",
+      "Connected to Codex. Send a task, photo, or file. Commands are in the menu. Use /format to change format: Rich does not receive partial text quotes.",
     downloadFailed: "File could not be downloaded",
     tooLarge: "Telegram cannot download files over 20 MiB",
     resolvedElsewhere: "Resolved in terminal",
@@ -91,9 +104,22 @@ export const catalog = {
     new: "Новый разговор",
     mode: "Режим",
     compact: "Сжать контекст",
+    format: "Формат сообщений",
+    formatRich: "Rich",
+    formatRegular: "Обычный",
+    formatRichInfo:
+      "Rich: форматированные блоки и таблицы. Telegram не передаёт цитаты отдельных фрагментов текста. Изменение действует со следующей задачи.",
+    formatRegularInfo:
+      "Обычный: базовое форматирование и цитаты фрагментов; таблицы — текстом, длинные ответы делятся по 4096 символов. Изменение действует со следующей задачи.",
+    compacting: "⏳ Сжимаю контекст",
+    compactFailed: "⚠️ Не удалось сжать контекст. Подробности: thc doctor",
+    compactRejected:
+      "⚠️ Не удалось начать сжатие контекста. Подробности: thc doctor",
+    compactUncertain:
+      "⚠️ Сжатие могло начаться. Проверь статус перед повтором.",
     help: "Помощь",
     welcome:
-      "Подключён к Codex. Пиши задачи, присылай фото и файлы. Команды — в меню.",
+      "Подключён к Codex. Пиши задачи, присылай фото и файлы. Команды — в меню. Формат: /format; в Rich цитаты фрагментов текста не передаются.",
     downloadFailed: "Файл не скачался",
     tooLarge: "Telegram не даёт боту скачать файлы больше 20 МиБ",
     resolvedElsewhere: "Решено в терминале",

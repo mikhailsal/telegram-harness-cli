@@ -17,6 +17,7 @@ export function itemProgress(
   item: Item,
 ): AdapterEvent | undefined {
   let data: { kind: string; detail?: string } | undefined;
+  if (item.type === "contextCompaction") data = { kind: "compacting" };
   if (item.type === "reasoning") data = { kind: "thinking" };
   if (item.type === "commandExecution") {
     const read = readAction(item);

@@ -120,8 +120,8 @@ it("registers default and localized command menus without contacting an external
     tickIntervalMs: 20,
   });
   try {
-    await waitFor(() => fake.menus.length === 3);
-    expect(fake.menus).toEqual([undefined, "en", "ru"]);
+    await waitFor(() => fake.menus.length === 6);
+    expect(fake.menus).toEqual([undefined, "en", "ru", undefined, "en", "ru"]);
   } finally {
     controller.abort();
     await running;

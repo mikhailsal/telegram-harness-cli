@@ -5,16 +5,21 @@ import type { RuntimeContext } from "./context.js";
 import { activeTurn } from "./events.js";
 import { nextQueuedTurn } from "./queue.js";
 import { turnDraftId } from "./turn-draft.js";
+import { replySourceMessageId } from "./reply-target.js";
+import { isCompactionOnly } from "./compaction.js";
+import { chatMessageFormat, messageFormat, turnChatId } from "./format.js";
 
 interface Activity {
-  kind: "thinking" | "command" | "read" | "file-change";
+  kind: "thinking" | "command" | "read" | "file-change" | "compacting";
   detail?: string;
 }
 function activity(value: unknown): Activity | undefined {
   if (!value || typeof value !== "object" || !("kind" in value)) return;
   const item = value as { kind?: unknown; detail?: unknown };
   if (
-    !["thinking", "command", "read", "file-change"].includes(String(item.kind))
+    !["thinking", "command", "read", "file-change", "compacting"].includes(
+      String(item.kind),
+    )
   )
     return;
   return {
@@ -60,7 +65,12 @@ export class TurnStatuses {
     else if (event.kind === "turn-started") this.current = { kind: "thinking" };
     this.refresh();
   }
-  acknowledge(): void {
+  async acknowledge(): Promise<void> {
+    const turn = activeTurn(this.ctx);
+    if (turn) {
+      this.requestMove(turn);
+      await this.relocate(turn.id);
+    }
     this.acknowledgedUntil = this.ctx.now().getTime() + 3000;
     this.refresh();
   }
@@ -86,6 +96,7 @@ export class TurnStatuses {
       return strings.newDeferred;
     if (turn.status === "submitting" || turn.status === "uncertain")
       return strings.submitting;
+    if (this.current?.kind === "compacting") return strings.compacting;
     if (turn.source === "terminal") return strings.terminalWorking;
     return activityLabel(this.current, strings);
   }
@@ -117,10 +128,16 @@ export class TurnStatuses {
   private status(turn: Turn): ChannelStatus | undefined {
     const old = this.rows.get(turn.id);
     if (old) return old;
-    const chat = this.ctx.store.getCursor("chat-id");
-    if (!chat || this.ctx.config.status === "off") return;
+    const chat = turnChatId(this.ctx, turn);
+    if (this.ctx.config.status === "off") return;
     if (this.ctx.config.status === "draft")
       this.ctx.store.setCursor(`status-draft/${turn.id}`, "1");
+    const key = `status-anchor/${turn.id}`;
+    if (!this.ctx.store.getCursor(key))
+      this.ctx.store.setCursor(
+        key,
+        String(replySourceMessageId(this.ctx.store, turn, chat) ?? ""),
+      );
     const status = new ChannelStatus(
       this.ctx.channel,
       Number(chat),
@@ -129,12 +146,75 @@ export class TurnStatuses {
       `status/${turn.id}`,
       this.ctx.config.status,
       this.ctx.now,
+      turn.status === "queued"
+        ? chatMessageFormat(this.ctx, chat)
+        : messageFormat(this.ctx, turn, chat),
     );
     this.rows.set(turn.id, status);
     return status;
   }
-  async pause(id: string): Promise<void> {
+  async pause(id: string): Promise<boolean> {
+    const turn = this.ctx.store.getTurn(id);
+    const status = this.rows.get(id);
+    if (turn && status && !status.usesFormat(messageFormat(this.ctx, turn)))
+      this.requestMove(turn, true);
+    if (!(await this.relocate(id))) return false;
     await this.rows.get(id)?.pause();
+    return true;
+  }
+  private requestMove(turn: Turn, force = false): void {
+    const chat = turnChatId(this.ctx, turn);
+    const target = replySourceMessageId(this.ctx.store, turn, chat);
+    if (
+      force ||
+      (target !== undefined &&
+        String(target) !== this.ctx.store.getCursor(`status-anchor/${turn.id}`))
+    )
+      this.ctx.store.setCursor(`status-move/${turn.id}`, String(target ?? 0));
+  }
+  private pendingMoves(id?: string): Turn[] {
+    return this.ctx.store
+      .listTurns([
+        "active",
+        "submitting",
+        "uncertain",
+        "completed",
+        "failed",
+        "cancelled",
+        "interrupted",
+      ])
+      .filter(
+        (turn) =>
+          turn.entityId === this.ctx.entityId &&
+          (id === undefined || id === turn.id) &&
+          Boolean(this.ctx.store.getCursor(`status-move/${turn.id}`)),
+      );
+  }
+  hasRelocations(): boolean {
+    return this.pendingMoves().length > 0;
+  }
+  async relocate(id?: string): Promise<boolean> {
+    for (const turn of this.pendingMoves(id))
+      if (!(await this.relocateTurn(turn))) return false;
+    return true;
+  }
+  private async relocateTurn(turn: Turn): Promise<boolean> {
+    const key = `status-move/${turn.id}`;
+    const target = this.ctx.store.getCursor(key);
+    if (!target) return true;
+    const recovered =
+      !this.rows.has(turn.id) &&
+      this.ctx.store.getCursor(`status-draft/${turn.id}`) === "1";
+    const status = this.status(turn);
+    if (status) {
+      status.update(this.text(turn, this.ctx.now().getTime()));
+      if (!(await status.detach(recovered))) return false;
+    }
+    this.ctx.store.setCursor(`status-anchor/${turn.id}`, target);
+    this.ctx.store.setCursor(key, "");
+    if (["active", "submitting", "uncertain"].includes(turn.status))
+      status?.resume();
+    return true;
   }
   resumeUnsent(id: string): void {
     const delivered = this.ctx.store
@@ -148,8 +228,10 @@ export class TurnStatuses {
   ): Promise<boolean> {
     if ((await this.rows.get(id)?.stop(draft)) === false) return false;
     this.rows.delete(id);
-    if (draft !== "preserve")
+    if (draft !== "preserve") {
       this.ctx.store.setCursor(`status-draft/${id}`, "");
+      this.ctx.store.setCursor(`status-move/${id}`, "");
+    }
     return true;
   }
   private recoverCancelled(): Set<string> {
@@ -159,11 +241,12 @@ export class TurnStatuses {
       "active",
       "uncertain",
       "cancelled",
+      "completed",
     ])) {
       if (
         turn.entityId !== this.ctx.entityId ||
         this.rows.has(turn.id) ||
-        this.ctx.store.getCursor(`user-stop/${turn.id}`) !== "1" ||
+        !discardStatus(this.ctx, turn) ||
         this.ctx.store.getCursor(`status-draft/${turn.id}`) !== "1"
       )
         continue;
@@ -177,10 +260,7 @@ export class TurnStatuses {
     let cleared = true;
     for (const id of this.rows.keys()) {
       const turn = this.ctx.store.getTurn(id);
-      if (
-        turn?.status === "cancelled" ||
-        this.ctx.store.getCursor(`user-stop/${id}`) === "1"
-      )
+      if (turn && discardStatus(this.ctx, turn))
         if (!(await this.remove(id, recovered.has(id) ? "recover" : "discard")))
           cleared = false;
     }
@@ -189,4 +269,11 @@ export class TurnStatuses {
   async close(): Promise<void> {
     for (const id of this.rows.keys()) await this.remove(id, "preserve");
   }
+}
+function discardStatus(ctx: RuntimeContext, turn: Turn): boolean {
+  return (
+    turn.status === "cancelled" ||
+    ctx.store.getCursor(`user-stop/${turn.id}`) === "1" ||
+    (turn.status === "completed" && isCompactionOnly(ctx, turn))
+  );
 }

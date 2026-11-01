@@ -31,6 +31,7 @@ const knownCommands = new Set([
   "new",
   "mode",
   "compact",
+  "format",
   "help",
   "start",
 ]);
@@ -62,19 +63,23 @@ export function recordEvent(
     receivedAt: ctx.now().toISOString(),
     payload: JSON.stringify(event),
   };
-  if (event.kind !== "message") return ctx.store.recordInbox(row);
+  if (event.kind !== "message" && event.kind !== "command")
+    return ctx.store.recordInbox(row);
   const visible = {
     id: `inbound/${String(event.updateId)}`,
     chatId: event.chatId,
     telegramMessageId: event.messageId,
     author: "user" as const,
     sentAt: event.sentAt,
-    text: [
-      event.text,
-      ...event.attachments.map((file) => file.fileName ?? file.kind),
-    ]
-      .filter(Boolean)
-      .join("\n"),
+    text:
+      event.kind === "command"
+        ? `/${event.command}${event.arguments ? ` ${event.arguments}` : ""}`
+        : [
+            event.text,
+            ...event.attachments.map((file) => file.fileName ?? file.kind),
+          ]
+            .filter(Boolean)
+            .join("\n"),
     turnId: null,
     possiblyDuplicated: false,
   };

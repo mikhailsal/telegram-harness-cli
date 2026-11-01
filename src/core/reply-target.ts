@@ -21,7 +21,7 @@ function relatedTurns(store: Store, turn: Turn): Turn[] {
       );
     });
 }
-export function replyTarget(
+export function replySourceMessageId(
   store: Store,
   turn: Turn,
   chatId: string,
@@ -39,10 +39,13 @@ export function replyTarget(
   const source = sources.sort(
     (a, b) => b.telegramMessageId - a.telegramMessageId,
   )[0];
-  if (
-    !source ||
-    store.latestVisibleMessageId(chatId) === source.telegramMessageId
-  )
-    return undefined;
-  return source.telegramMessageId;
+  return source?.telegramMessageId;
+}
+export function replyTarget(
+  store: Store,
+  turn: Turn,
+  chatId: string,
+): number | undefined {
+  const source = replySourceMessageId(store, turn, chatId);
+  return source === store.latestVisibleMessageId(chatId) ? undefined : source;
 }

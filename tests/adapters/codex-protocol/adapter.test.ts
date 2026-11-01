@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
 import { expect, it } from "vitest";
-import { SteerRejectedError } from "../../../src/adapters/contract.ts";
+import {
+  CompactRejectedError,
+  SteerRejectedError,
+} from "../../../src/adapters/contract.ts";
 import type { AdapterEvent } from "../../../src/adapters/contract.ts";
 import { ProtocolAdapter } from "../../../src/adapters/codex-protocol/index.ts";
 
@@ -88,7 +91,22 @@ async function listen(server: Server, path: string): Promise<void> {
     });
   });
 }
-async function setup(parent = tmpdir()) {
+function rejectCompact(
+  socket: WebSocket,
+  request: Request,
+  code?: number,
+): boolean {
+  if (request.method !== "thread/compact/start" || code === undefined)
+    return false;
+  socket.send(
+    JSON.stringify({
+      id: request.id,
+      error: { code, message: "compact error" },
+    }),
+  );
+  return true;
+}
+async function setup(parent = tmpdir(), compactCode?: number) {
   const directory = await mkdtemp(join(parent, "thc-protocol-test-"));
   // Linux limits Unix-socket names to 107 bytes; the quality snapshot uses a
   // deeply nested TMPDIR, so address the same directory through its short fd path.
@@ -108,6 +126,7 @@ async function setup(parent = tmpdir()) {
           : data;
       const request = JSON.parse(bytes.toString("utf8")) as Request;
       calls.push(request);
+      if (rejectCompact(socket, request, compactCode)) return;
       respond(socket, request);
     });
   });
@@ -137,6 +156,21 @@ async function setup(parent = tmpdir()) {
     },
   };
 }
+it.each([
+  [-32600, true],
+  [-32603, false],
+])("classifies compact RPC error %s conservatively", async (code, definite) => {
+  const fixture = await setup(tmpdir(), code);
+  try {
+    await fixture.adapter.reconcile();
+    const outcome = fixture.adapter.compact();
+    if (definite)
+      await expect(outcome).rejects.toBeInstanceOf(CompactRejectedError);
+    else await expect(outcome).rejects.not.toBeInstanceOf(CompactRejectedError);
+  } finally {
+    await fixture.cleanup();
+  }
+});
 async function checkApproval(
   adapter: ProtocolAdapter,
   client: WebSocket | undefined,

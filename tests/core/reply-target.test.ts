@@ -120,7 +120,7 @@ it("suppresses an automatic quote only when the final message replaces its own l
   expect(sender.finish(source, "completed", "answer")).toBe(true);
   expect(store.getOutbox(`${source.id}/0`)?.replyToMessageId).toBe(10);
   await sender.flush();
-  expect(hasDraft).toHaveBeenCalledWith("1", turnDraftId(source));
+  expect(hasDraft).toHaveBeenCalledWith("1", turnDraftId(source), "rich");
   expect(deliverChunk.mock.calls[0]?.[2]).not.toHaveProperty(
     "replyToMessageId",
   );

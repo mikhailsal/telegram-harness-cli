@@ -6,6 +6,8 @@ import type { ChannelEvent } from "../channels/index.js";
 import type { Turn } from "../store/index.js";
 import type { RuntimeContext } from "./context.js";
 import { consumeTurnInbox } from "./queue.js";
+import { CompactRejectedError } from "../adapters/contract.js";
+import { decideFormat, showFormat } from "./format-command.js";
 export interface CommandDelivery {
   finish(
     turn: Turn,
@@ -34,7 +36,7 @@ export class Commands {
       return;
     }
     if (event.command === "new") {
-      await this.newSession(event, active);
+      await this.newSession(active);
       return;
     }
     if (event.command === "mode") {
@@ -43,6 +45,10 @@ export class Commands {
     }
     if (event.command === "compact") {
       await this.compact(event);
+      return;
+    }
+    if (event.command === "format") {
+      await showFormat(this.ctx, event);
       return;
     }
     if (event.command === "start") {
@@ -63,24 +69,39 @@ export class Commands {
     }
     if (event.command === "help") await this.reply(event, strings.welcome);
   }
-  private async newSession(event: Command, active: Turn[]): Promise<void> {
-    const strings = catalog[event.language];
+  private async newSession(active: Turn[]): Promise<void> {
     if (active.length || !this.ctx.adapterReady) {
       this.ctx.store.setCursor("deferred-new", "1");
-      await this.reply(event, strings.newDeferred);
     } else {
       await this.ctx.rotateSession();
-      await this.reply(event, strings.newStarted);
     }
   }
   private async compact(event: Command): Promise<void> {
+    const compact = this.ctx.adapter.compact?.bind(this.ctx.adapter);
     if (
-      this.ctx.adapterReady &&
-      this.ctx.adapter.compact &&
-      this.ctx.adapter.capabilities.has("compact")
-    )
-      await this.ctx.adapter.compact();
-    else await this.reply(event, catalog[event.language].failed);
+      !this.ctx.adapterReady ||
+      !compact ||
+      !this.ctx.adapter.capabilities.has("compact")
+    ) {
+      await this.reply(event, catalog[event.language].compactRejected);
+      return;
+    }
+    const key = `compact-intent/${String(event.updateId)}`;
+    if (this.ctx.store.getCursor(key)) return;
+    this.ctx.store.setCursor(key, "1");
+    try {
+      await compact();
+    } catch (error) {
+      this.ctx.log("compact.failed", {
+        code: error instanceof CompactRejectedError ? "rejected" : "uncertain",
+      });
+      await this.reply(
+        event,
+        error instanceof CompactRejectedError
+          ? catalog[event.language].compactRejected
+          : catalog[event.language].compactUncertain,
+      );
+    }
   }
   private async status(event: Command, active: Turn[]): Promise<void> {
     const strings = catalog[event.language];
@@ -179,6 +200,7 @@ export class Commands {
   async decision(
     event: Extract<ChannelEvent, { kind: "decision" }>,
   ): Promise<boolean> {
+    if (await decideFormat(this.ctx, event)) return true;
     const match = /^mode:(queue|steer)$/u.exec(event.data);
     if (!match?.[1]) return false;
     const card = this.ctx.store

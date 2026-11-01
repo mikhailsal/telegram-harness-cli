@@ -1,6 +1,7 @@
 import { classifyTelegramError } from "./telegram.js";
 import type { TelegramChannel } from "./telegram.js";
 import type { TransientManager } from "./transient.js";
+import type { TelegramMessageFormat } from "./types.js";
 
 export class ChannelStatus {
   private readonly channel: TelegramChannel;
@@ -9,6 +10,7 @@ export class ChannelStatus {
   private readonly transient: TransientManager | undefined;
   private readonly transientId: string | undefined;
   private readonly now: () => Date;
+  private readonly format: TelegramMessageFormat;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private heartbeat: ReturnType<typeof setInterval> | undefined;
   private text = "";
@@ -31,6 +33,7 @@ export class ChannelStatus {
     transientId?: string,
     mode: "draft" | "message" = "draft",
     now: () => Date = () => new Date(),
+    format: TelegramMessageFormat = "rich",
   ) {
     this.channel = channel;
     this.chatId = chatId;
@@ -39,6 +42,7 @@ export class ChannelStatus {
     this.transientId = transientId;
     this.draftEnabled = mode === "draft";
     this.now = now;
+    this.format = format;
   }
   update(text: string, force = false): void {
     if (this.paused) {
@@ -102,7 +106,15 @@ export class ChannelStatus {
     this.last = this.now().getTime();
     if (this.draftEnabled) {
       try {
-        await this.channel.draft(this.chatId, this.draftId, this.text);
+        if (this.format === "rich")
+          await this.channel.draft(this.chatId, this.draftId, this.text);
+        else
+          await this.channel.draft(
+            this.chatId,
+            this.draftId,
+            this.text,
+            this.format,
+          );
         return;
       } catch (error) {
         if (this.retry(error)) return;
@@ -196,6 +208,9 @@ export class ChannelStatus {
     this.heartbeat = undefined;
     await this.pending;
   }
+  usesFormat(format: TelegramMessageFormat): boolean {
+    return this.format === format;
+  }
   resume(): void {
     if (!this.paused || this.stopped) return;
     this.paused = false;
@@ -209,14 +224,13 @@ export class ChannelStatus {
       this.recoveredUntil <= now
     )
       return true;
-    const send = async (): Promise<number> =>
-      (
-        await this.channel.bot.api.sendRichMessage(
-          this.chatId,
-          { blocks: [{ type: "paragraph", text: this.text }] },
-          { disable_notification: true },
-        )
-      ).message_id;
+    const send = (): Promise<number> =>
+      this.channel.finalizeDraft(
+        this.chatId,
+        this.draftId,
+        this.text,
+        this.format,
+      );
     try {
       if (this.transient && this.transientId) {
         const id = `${this.transientId}/discard`;
@@ -238,6 +252,12 @@ export class ChannelStatus {
       return false;
     }
   }
+  async detach(recovered = false): Promise<boolean> {
+    await this.pause();
+    if (!(await this.discardDraft(recovered))) return false;
+    await this.removeMessage();
+    return true;
+  }
   async stop(
     draft: "preserve" | "discard" | "recover" = "preserve",
   ): Promise<boolean> {
@@ -245,6 +265,10 @@ export class ChannelStatus {
     await this.pause();
     if (draft !== "preserve" && !(await this.discardDraft(draft === "recover")))
       return false;
+    await this.removeMessage();
+    return true;
+  }
+  private async removeMessage(): Promise<void> {
     if (this.transient && this.transientId)
       await this.transient.remove(this.transientId);
     else if (this.messageId !== undefined) {
@@ -255,6 +279,5 @@ export class ChannelStatus {
       }
     }
     this.messageId = undefined;
-    return true;
   }
 }

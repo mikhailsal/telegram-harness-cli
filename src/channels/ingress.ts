@@ -326,15 +326,26 @@ function stoppedEvent(
 ): ChannelEvent | undefined {
   const stopped = update.stopped_message_generation;
   if (!stopped || !allowed.has(String(stopped.chat.id))) return undefined;
+  const draftId = positiveSafeInteger(stopped.draft_id);
+  if (draftId === undefined) return undefined;
   return {
     ...base(
       update.update_id,
       stopped.chat.id,
       stopped.chat.id,
-      stopped.draft_id,
+      draftId,
       Math.floor(Date.now() / 1000),
       fallback,
     ),
     kind: "generation-stopped",
   };
+}
+function positiveSafeInteger(value: unknown): number | undefined {
+  if (typeof value === "string") {
+    if (!/^\d+$/u.test(value)) return undefined;
+    value = Number(value);
+  }
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0
+    ? value
+    : undefined;
 }

@@ -44,6 +44,14 @@ Before tagging, use a separate test bot in a Telegram client for this manual che
 - Check a question, a reaction, a reply and a forwarded message.
 - Send a photo, album, voice note and document; verify captions and local paths.
 - Check queue status, silent continuations and removal of temporary messages.
+- Check that command inputs remain in the chat and visible history after another
+  message and after ten minutes. `/new` and `/compact` should not add synthetic
+  success acknowledgements; compaction shows its own progress status.
+- Use `/format` to switch between Rich and Regular for the next turn. Rich
+  supports formatted blocks and tables, but Telegram does not forward partial
+  text quotes. Regular uses basic formatting, carries partial quotes, renders
+  tables as text, and splits long replies at 4096 characters. The `format` field
+  in `.thc/config.json` defaults to `"rich"` and also accepts `"regular"`.
 - Restart the bridge during a turn and check the resulting answer and history.
 
 Run `node scripts/release.ts` only after acceptance and the manual check. It

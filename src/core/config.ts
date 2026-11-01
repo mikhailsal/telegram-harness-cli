@@ -23,6 +23,7 @@ export const configSchema = z.strictObject({
   timezone: timezone.default("UTC"),
   status: z.enum(["draft", "message", "off"]).default("draft"),
   mode: z.enum(["queue", "steer"]).default("queue"),
+  format: z.enum(["rich", "regular"]).default("rich"),
   mirror_non_tg_input: z.boolean().default(false),
   non_tg_marker: z.string().min(1).max(20).default("🖥"),
   markup: z

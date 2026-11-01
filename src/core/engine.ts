@@ -1,5 +1,5 @@
 import { SteerRejectedError } from "../adapters/contract.js";
-import { catalog, transientIntent } from "../channels/index.js";
+import { catalog } from "../channels/index.js";
 import type { ChannelEvent } from "../channels/index.js";
 import type { AdapterEvent } from "../adapters/contract.js";
 import type { Turn } from "../store/index.js";
@@ -7,6 +7,7 @@ import type { RuntimeContext } from "./context.js";
 import { Commands } from "./commands.js";
 import { TurnStatuses } from "./status.js";
 import { turnDraftId } from "./turn-draft.js";
+import { messageFormat } from "./format.js";
 import type { CommandDelivery } from "./commands.js";
 import { AdapterEvents, activeTurn, queueRequestSummaries } from "./events.js";
 import {
@@ -35,7 +36,8 @@ const requestEvents = new Set<AdapterEvent["kind"]>([
   "question-requested",
 ]);
 export interface EngineDelivery extends CommandDelivery {
-  onSending?: ((turnId: string) => Promise<void>) | undefined;
+  onSending?:
+    ((turnId: string) => Promise<boolean> | Promise<void>) | undefined;
   onSendFailed?: ((turnId: string) => void) | undefined;
   onDelivered: ((turnId: string) => Promise<void>) | undefined;
   flush(): Promise<void>;
@@ -201,15 +203,6 @@ export class TurnEngine {
       await this.pump();
     }
     await this.ctx.transient.removeKind("command", event.chatId);
-    this.ctx.transient.registerExisting(
-      transientIntent(
-        `command-input/${String(event.updateId)}`,
-        "command",
-        event.chatId,
-        this.ctx.now(),
-      ),
-      event.messageId,
-    );
     if (event.command !== "stop") await this.commands.run(event);
     await this.statuses.cancelled();
   }
@@ -252,6 +245,7 @@ export class TurnEngine {
   }
   private async settleStopped(active: Turn | undefined): Promise<boolean> {
     let interrupted = false;
+    const moving = this.statuses.hasRelocations();
     if (
       active?.externalTurnId &&
       this.ctx.store.getCursor("stop-pending") === "1"
@@ -260,7 +254,12 @@ export class TurnEngine {
       this.ctx.store.setCursor("stop-pending", "0");
       interrupted = true;
     }
-    return !(await this.statuses.cancelled()) || interrupted;
+    return (
+      !(await this.statuses.cancelled()) ||
+      !(await this.statuses.relocate()) ||
+      interrupted ||
+      moving
+    );
   }
   private async pump(): Promise<void> {
     if (!this.ctx.adapterReady) {
@@ -336,7 +335,7 @@ export class TurnEngine {
       });
       consumeTurnInbox(this.ctx, turn.id);
       acceptReaction(this.ctx, turn.id);
-      this.statuses.acknowledge();
+      await this.statuses.acknowledge();
     } catch (error) {
       if (error instanceof SteerRejectedError) {
         this.ctx.store.requeueRejectedSteer(
@@ -351,6 +350,7 @@ export class TurnEngine {
     }
   }
   private async submit(turn: Turn): Promise<void> {
+    messageFormat(this.ctx, turn);
     trackReaction(this.ctx, turn.id);
     const text = await turnText(this.ctx, turn);
     this.ctx.store.setCursor(`followup-of/${turn.id}`, "");

@@ -9,7 +9,7 @@ import type {
 } from "../contract.ts";
 import { EventQueue } from "./queue.ts";
 import { ProtocolTransport, RpcError } from "./transport.ts";
-import { SteerRejectedError } from "../contract.ts";
+import { CompactRejectedError, SteerRejectedError } from "../contract.ts";
 import { historyEvents, itemEvent } from "./events.ts";
 import { itemProgress, ReasoningProgress } from "./progress.ts";
 import type { Notification } from "./schema.ts";
@@ -152,9 +152,18 @@ export class ProtocolAdapter implements HarnessAdapter {
   }
   async compact(): Promise<void> {
     if (!this.ready || !this.sessionId) throw new Error("Session is not ready");
-    await this.transport.call("thread/compact/start", {
-      threadId: this.sessionId,
-    });
+    try {
+      await this.transport.call("thread/compact/start", {
+        threadId: this.sessionId,
+      });
+    } catch (error) {
+      if (
+        error instanceof RpcError &&
+        [-32600, -32601, -32602].includes(error.code ?? 0)
+      )
+        throw new CompactRejectedError();
+      throw error;
+    }
   }
   observe(): AsyncIterable<AdapterEvent> {
     return this.queue;
