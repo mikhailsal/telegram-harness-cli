@@ -32,7 +32,9 @@ Before tagging, use a separate test bot in a Telegram client for this manual che
 - Verify rich text, long answers, code blocks and a large code attachment.
 - Verify the draft appears, its stop button works, and it restarts after a card.
   Check its native thinking animation while the task runs.
-  It must disappear immediately with the final answer, without a lingering timer.
+  It must disappear immediately with the final answer, without a lingering timer
+  or stop button. Observe the reply for another 35 seconds: its message must not
+  disappear and reappear.
 - Run a delayed task and send `/stop`: the preview must disappear without an AI
   answer or a lasting acknowledgement. Repeat with the native stop button.
   Check `/stop` in the command menu, including a client language other than
@@ -45,13 +47,19 @@ Before tagging, use a separate test bot in a Telegram client for this manual che
 - Send a photo, album, voice note and document; verify captions and local paths.
 - Check queue status, silent continuations and removal of temporary messages.
 - Check that command inputs remain in the chat and visible history after another
-  message and after ten minutes. `/new` and `/compact` should not add synthetic
-  success acknowledgements; compaction shows its own progress status.
+  message and after ten minutes. `/new` confirms after the new session starts;
+  standalone compaction confirms after completion. These service confirmations
+  disappear on the next request or after ten minutes.
+- Check `/mode queue` and `/format regular`, then their button choosers. Both
+  paths retain the selected value in a temporary confirmation without buttons.
 - Use `/format` to switch between Rich and Regular for the next turn. Rich
   supports formatted blocks and tables, but Telegram does not forward partial
   text quotes. Regular uses basic formatting, carries partial quotes, renders
   tables as text, and splits long replies at 4096 characters. The `format` field
   in `.thc/config.json` defaults to `"rich"` and also accepts `"regular"`.
+  The animated service status remains the same in both formats. Check a
+  multiline quote containing bold and italic spans: compatible spans belong to
+  one quote, with no empty quote bars between lines.
 - Restart the bridge during a turn and check the resulting answer and history.
 
 Run `node scripts/release.ts` only after acceptance and the manual check. It

@@ -9,6 +9,10 @@ import { PendingManager } from "./pending.js";
 import { completionStatus, completionText } from "./results.js";
 import { acceptReaction } from "./interactions.js";
 import { messageFormat } from "./format.js";
+import {
+  confirmCompaction,
+  markCompactionNotice,
+} from "./command-completions.js";
 import { isCompactionOnly, observeCompaction } from "./compaction.js";
 export { queueRequestSummaries } from "./request-summary.js";
 
@@ -44,6 +48,7 @@ export class AdapterEvents {
     const turn = this.findTurn(event);
     if (!turn) return;
     observeCompaction(this.ctx, turn, event);
+    markCompactionNotice(this.ctx, turn, event);
     if (
       event.kind === "approval-requested" ||
       event.kind === "question-requested"
@@ -268,6 +273,7 @@ export class AdapterEvents {
       consumeTurnInbox(this.ctx, turn.id);
       await this.pending.cancelTurn(turn.id);
       this.completeFollowups(turn, status);
+      if (success) await confirmCompaction(this.ctx, turn);
     }
   }
   private async completeUserStop(turn: Turn): Promise<boolean> {
@@ -288,6 +294,8 @@ export class AdapterEvents {
       turn.result === null
     )
       return;
+    if (turn.status === "completed" && isCompactionOnly(this.ctx, turn))
+      await confirmCompaction(this.ctx, turn);
     await this.pending.cancelTurn(turn.id);
     this.completeFollowups(
       turn,

@@ -36,6 +36,7 @@ export const catalog = {
     formatRegularInfo:
       "Regular: basic formatting and partial text quotes; tables are text and long replies split at 4096 characters. Changes apply to the next turn.",
     compacting: "⏳ Compacting context",
+    compactCompleted: "Context compacted.",
     compactFailed: "⚠️ Context compaction failed. Details: thc doctor",
     compactRejected:
       "⚠️ Could not start context compaction. Details: thc doctor",
@@ -112,6 +113,7 @@ export const catalog = {
     formatRegularInfo:
       "Обычный: базовое форматирование и цитаты фрагментов; таблицы — текстом, длинные ответы делятся по 4096 символов. Изменение действует со следующей задачи.",
     compacting: "⏳ Сжимаю контекст",
+    compactCompleted: "Контекст сжат.",
     compactFailed: "⚠️ Не удалось сжать контекст. Подробности: thc doctor",
     compactRejected:
       "⚠️ Не удалось начать сжатие контекста. Подробности: thc doctor",

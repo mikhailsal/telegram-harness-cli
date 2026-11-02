@@ -8,6 +8,8 @@ import type { RuntimeContext } from "./context.js";
 import { consumeTurnInbox } from "./queue.js";
 import { CompactRejectedError } from "../adapters/contract.js";
 import { decideFormat, showFormat } from "./format-command.js";
+import { saveCompletion } from "./command-completions.js";
+import { applySetting, effectiveSettings } from "./settings-audit.js";
 export interface CommandDelivery {
   finish(
     turn: Turn,
@@ -36,7 +38,7 @@ export class Commands {
       return;
     }
     if (event.command === "new") {
-      await this.newSession(active);
+      await this.newSession(event, active);
       return;
     }
     if (event.command === "mode") {
@@ -69,11 +71,13 @@ export class Commands {
     }
     if (event.command === "help") await this.reply(event, strings.welcome);
   }
-  private async newSession(active: Turn[]): Promise<void> {
+  private async newSession(event: Command, active: Turn[]): Promise<void> {
     if (active.length || !this.ctx.adapterReady) {
+      saveCompletion(this.ctx, "deferred-new-command", event);
       this.ctx.store.setCursor("deferred-new", "1");
     } else {
-      await this.ctx.rotateSession();
+      await this.ctx.rotateSession(event.updateId);
+      await this.reply(event, catalog[event.language].newStarted);
     }
   }
   private async compact(event: Command): Promise<void> {
@@ -153,19 +157,15 @@ export class Commands {
   private async mode(event: Command): Promise<void> {
     const mode = event.arguments.trim().toLowerCase();
     const strings = catalog[event.language];
-    if (!mode) {
+    if (mode !== "queue" && mode !== "steer") {
       await this.modeChooser(event);
       return;
     }
-    if (mode === "queue" || mode === "steer")
-      this.ctx.store.setCursor("followup-mode", mode);
+    applySetting(this.ctx, event, "mode", mode);
+    const current = effectiveSettings(this.ctx, event.chatId).mode;
     await this.reply(
       event,
-      (mode ||
-        (this.ctx.store.getCursor("followup-mode") ?? this.ctx.config.mode)) ===
-        "steer"
-        ? strings.steerMode
-        : strings.queueMode,
+      current === "steer" ? strings.steerMode : strings.queueMode,
     );
   }
   private async modeChooser(event: Command): Promise<void> {
@@ -218,9 +218,21 @@ export class Commands {
       );
       return true;
     }
-    this.ctx.store.setCursor("followup-mode", match[1]);
+    const mode = match[1] === "steer" ? "steer" : "queue";
+    applySetting(this.ctx, event, "mode", mode);
     await this.ctx.channel.answerCallback(event.callbackId);
-    await this.ctx.transient.remove(card.id);
+    const strings = catalog[event.language];
+    const current = effectiveSettings(this.ctx, event.chatId).mode;
+    try {
+      await this.ctx.channel.bot.api.editMessageText(
+        event.chatId,
+        event.messageId,
+        current === "steer" ? strings.steerMode : strings.queueMode,
+        { reply_markup: { inline_keyboard: [] } },
+      );
+    } catch {
+      this.ctx.log("mode.panel-edit-failed");
+    }
     return true;
   }
   private async reply(event: Command, text: string): Promise<void> {

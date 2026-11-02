@@ -1,10 +1,17 @@
 import { catalog, transientIntent } from "../channels/index.js";
 import type { ChannelEvent } from "../channels/index.js";
 import type { RuntimeContext } from "./context.js";
+import { applySetting } from "./settings-audit.js";
 
 type Format = "rich" | "regular";
 type Command = Extract<ChannelEvent, { kind: "command" }>;
 type Decision = Extract<ChannelEvent, { kind: "decision" }>;
+function confirmation(language: "en" | "ru", mode: Format): string {
+  const strings = catalog[language];
+  const info =
+    mode === "rich" ? strings.formatRichInfo : strings.formatRegularInfo;
+  return `${strings.format}: ${mode === "rich" ? strings.formatRich : strings.formatRegular}\n\n${info}`;
+}
 function current(ctx: RuntimeContext, chatId: string): Format {
   const stored = ctx.store.getCursor(`message-format/${chatId}`);
   return stored === "rich" || stored === "regular" ? stored : ctx.config.format;
@@ -13,7 +20,7 @@ function panel(language: "en" | "ru", mode: Format) {
   const strings = catalog[language];
   const label = mode === "rich" ? strings.formatRich : strings.formatRegular;
   return {
-    text: `${strings.format}: ${label}\n\n${mode === "rich" ? strings.formatRichInfo : strings.formatRegularInfo}`,
+    text: `${strings.format}: ${label}\n\n${strings.formatRichInfo}${mode === "regular" ? `\n\n${strings.formatRegularInfo}` : ""}`,
     reply_markup: {
       inline_keyboard: [
         [
@@ -35,8 +42,19 @@ export async function showFormat(
   event: Command,
 ): Promise<void> {
   const argument = event.arguments.trim().toLowerCase();
-  if (argument === "rich" || argument === "regular")
-    ctx.store.setCursor(`message-format/${event.chatId}`, argument);
+  if (argument === "rich" || argument === "regular") {
+    applySetting(ctx, event, "format", argument);
+    await ctx.transient.send(
+      transientIntent(
+        `format/${String(event.updateId)}`,
+        "command",
+        event.chatId,
+        ctx.now(),
+      ),
+      confirmation(event.language, current(ctx, event.chatId)),
+    );
+    return;
+  }
   const content = panel(event.language, current(ctx, event.chatId));
   await ctx.transient.create(
     transientIntent(
@@ -77,15 +95,14 @@ export async function decideFormat(
     return true;
   }
   const value = match[1] === "rich" ? "rich" : "regular";
-  ctx.store.setCursor(`message-format/${event.chatId}`, value);
+  applySetting(ctx, event, "format", value);
   await ctx.channel.answerCallback(event.callbackId);
-  const content = panel(event.language, value);
   try {
     await ctx.channel.bot.api.editMessageText(
       event.chatId,
       event.messageId,
-      content.text,
-      { reply_markup: content.reply_markup },
+      confirmation(event.language, current(ctx, event.chatId)),
+      { reply_markup: { inline_keyboard: [] } },
     );
   } catch {
     ctx.log("format.panel-edit-failed");

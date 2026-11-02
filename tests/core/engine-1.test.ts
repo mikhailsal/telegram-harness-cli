@@ -7,6 +7,7 @@ import { parseConfig } from "../../src/core/config.js";
 import { Delivery } from "../../src/core/delivery.js";
 import { TurnEngine } from "../../src/core/engine.js";
 import type { RuntimeContext } from "../../src/core/context.js";
+import { catalog } from "../../src/channels/index.js";
 import type { ChannelEvent } from "../../src/channels/index.js";
 
 const roots: string[] = [];
@@ -302,6 +303,11 @@ it("records transient command replies and defers new sessions until active work 
       text: "done",
     });
     expect(rotateSession).toHaveBeenCalledTimes(2);
+    expect(rotateSession).toHaveBeenLastCalledWith(7);
+    expect(transient.send).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "command" }),
+      catalog.en.newStarted,
+    );
     const compact = vi.fn().mockResolvedValue(undefined);
     context.adapter.compact = compact;
     (context.adapter.capabilities as Set<string>).add("compact");

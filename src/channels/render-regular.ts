@@ -129,7 +129,11 @@ function linkTags(node: RegularNode, tags: Tag[], ctx: Context): Tag[] {
       ? ctx.definitions.get(referenceKey(node.identifier))
       : node.url;
     const url = safeLink(target);
-    if (url) return [...tags, { open: `<a href="${url}">`, close: "</a>" }];
+    if (url)
+      return [
+        ...tags.filter((item) => item.open !== "<blockquote>"),
+        { open: `<a href="${url}">`, close: "</a>" },
+      ];
   }
   return tags;
 }
@@ -232,38 +236,60 @@ function emitTable(node: RegularNode, ctx: Context, tags: Tag[]): void {
     });
   });
 }
-function wrap(text: string, tags: Tag[]): string {
-  return (
-    tags.map((item) => item.open).join("") +
-    escape(text) +
-    [...tags]
-      .reverse()
-      .map((item) => item.close)
-      .join("")
-  );
+interface Output {
+  html: string;
+  plain: string;
+  tags: Tag[];
+  chunks: RenderChunk[];
+}
+function changeTags(out: Output, next: Tag[]): void {
+  let shared = 0;
+  while (
+    shared < out.tags.length &&
+    shared < next.length &&
+    out.tags[shared]?.open === next[shared]?.open &&
+    out.tags[shared]?.close === next[shared]?.close
+  )
+    shared++;
+  for (let i = out.tags.length - 1; i >= shared; i--)
+    out.html += out.tags[i]?.close ?? "";
+  for (let i = shared; i < next.length; i++) out.html += next[i]?.open ?? "";
+  out.tags = next;
+}
+function appendPart(out: Output, text: string, tags: Tag[]): void {
+  if (!text) return;
+  changeTags(out, tags);
+  out.html += escape(text);
+  out.plain += text;
+}
+function finishChunk(out: Output): void {
+  if (!out.plain) return;
+  changeTags(out, []);
+  out.chunks.push({
+    kind: "message",
+    style: "html",
+    text: out.html,
+    plain: out.plain,
+  });
+  out.html = "";
+  out.plain = "";
 }
 function splitPieces(pieces: Piece[]): RenderChunk[] {
-  const chunks: RenderChunk[] = [];
-  let html = "",
-    plain = "";
+  const out: Output = { html: "", plain: "", tags: [], chunks: [] };
   for (const piece of pieces) {
     let part = "";
     for (const char of piece.text) {
-      if (plain.length + part.length + char.length > 4096) {
-        if (part) html += wrap(part, piece.tags);
-        plain += part;
-        chunks.push({ kind: "message", style: "html", text: html, plain });
-        html = "";
-        plain = "";
+      if (out.plain.length + part.length + char.length > 4096) {
+        appendPart(out, part, piece.tags);
+        finishChunk(out);
         part = "";
       }
       part += char;
     }
-    if (part) html += wrap(part, piece.tags);
-    plain += part;
+    appendPart(out, part, piece.tags);
   }
-  if (plain) chunks.push({ kind: "message", style: "html", text: html, plain });
-  return chunks;
+  finishChunk(out);
+  return out.chunks;
 }
 function definitions(
   nodes: RegularNode[],

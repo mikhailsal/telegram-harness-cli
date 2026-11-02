@@ -48,12 +48,16 @@ export interface TelegramChannelOptions {
   fetch?: typeof fetch;
   language?: Language;
   hiddenTags?: readonly string[];
+  log?: (event: string, details: Record<string, unknown>) => void;
 }
 export interface DeliveryResult {
   messageIds: number[];
   visibleText: string;
 }
 export interface SendOptions {
+  consumeDraft?: boolean;
+  existingMessageId?: number;
+  onMessageCreated?: (messageId: number) => void;
   replyToMessageId?: number;
   fallbackReplyToMessageId?: number;
   silent?: boolean;

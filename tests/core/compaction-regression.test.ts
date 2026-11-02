@@ -58,6 +58,7 @@ function makeContext(
       },
     },
     transient: {
+      send: vi.fn().mockResolvedValue(1),
       removeKind: vi.fn().mockResolvedValue(undefined),
       remove: vi.fn().mockResolvedValue(undefined),
       sweep: vi.fn().mockResolvedValue(undefined),

@@ -184,6 +184,40 @@ it.each([
   },
 );
 
+it("uses a rich carrier to replace the preview before converting a regular answer", async () => {
+  const source = turn("regular-source");
+  visible(source.id, 10);
+  visible(turn("later").id, 11);
+  store.setCursor("message-format/1", "regular");
+  const deliverChunk = vi
+    .fn<TelegramChannel["deliverChunk"]>()
+    .mockResolvedValue({ messageIds: [12], visibleText: "answer" });
+  const hasDraft = vi.fn(
+    (_chat: string, _id: number, family?: string) => family === "rich",
+  );
+  const ctx = {
+    store,
+    channel: { hasDraft, deliverChunk },
+    config: parseConfig({
+      token: { env: "TOKEN" },
+      allowlist: [1],
+      sandbox: "read-only",
+    }),
+    now: () => new Date(at),
+    log: vi.fn(),
+  } as unknown as RuntimeContext;
+  const sender = new Delivery(ctx);
+  expect(sender.finish(source, "completed", "answer")).toBe(true);
+  await sender.flush();
+  expect(hasDraft).toHaveBeenCalledWith("1", turnDraftId(source), "rich");
+  expect(deliverChunk.mock.calls[0]?.[2]).toMatchObject({
+    consumeDraft: true,
+    fallbackReplyToMessageId: 10,
+  });
+  expect(deliverChunk.mock.calls[0]?.[2]?.replyToMessageId).toBeUndefined();
+  expect(deliverChunk.mock.calls[0]?.[1]).toMatchObject({ style: "html" });
+});
+
 it("preserves legacy queued reply targets when a matching draft exists", async () => {
   const source = turn("ccddee-source");
   const deliverChunk = vi

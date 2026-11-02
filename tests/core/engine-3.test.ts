@@ -57,6 +57,7 @@ function fakeServices() {
   const download = vi.fn().mockResolvedValue("/file");
   const answerCallback = vi.fn().mockResolvedValue(undefined);
   const sendMessage = vi.fn().mockResolvedValue({ message_id: 88 });
+  const editMessageText = vi.fn().mockResolvedValue(true);
   const transient = fakeTransient();
   const rotateSession = vi.fn().mockResolvedValue(undefined);
   return {
@@ -68,6 +69,7 @@ function fakeServices() {
     rotateSession,
     answerCallback,
     sendMessage,
+    editMessageText,
   };
 }
 function seedStore(
@@ -98,22 +100,23 @@ function fakeConfig() {
     status: "off",
   });
 }
+function fakeChannel(services: ReturnType<typeof fakeServices>) {
+  const { deliverChunk, answerCallback, sendMessage, editMessageText } =
+    services;
+  return {
+    deliverChunk,
+    answerCallback,
+    bot: { api: { sendMessage, editMessageText } },
+  };
+}
 function setup() {
   const root = mkdtempSync(join(tmpdir(), "thc-engine-"));
   roots.push(root);
   const store = openStore(join(root, "store.sqlite"));
   const now = new Date("2026-10-31T12:00:00Z");
   seedStore(store, root, now);
-  const {
-    adapter,
-    submit,
-    deliverChunk,
-    download,
-    transient,
-    rotateSession,
-    answerCallback,
-    sendMessage,
-  } = fakeServices();
+  const services = fakeServices();
+  const { adapter, download, transient, rotateSession } = services;
   const context = {
     directory: root,
     config: fakeConfig(),
@@ -123,7 +126,7 @@ function setup() {
     sessionId: "session",
     adapterReady: true,
     now: () => now,
-    channel: { deliverChunk, answerCallback, bot: { api: { sendMessage } } },
+    channel: fakeChannel(services),
     transient,
     files: { download },
     notice: {},
@@ -132,20 +135,12 @@ function setup() {
     persistAdapter: vi.fn(),
     rotateSession,
   } as unknown as RuntimeContext;
-  const delivery = new Delivery(context);
-  const engine = new TurnEngine(context, delivery);
+  const engine = new TurnEngine(context, new Delivery(context));
   return {
     root,
     store,
     now,
-    adapter,
-    submit,
-    deliverChunk,
-    download,
-    transient,
-    rotateSession,
-    answerCallback,
-    sendMessage,
+    ...services,
     context,
     engine,
   };
@@ -222,7 +217,14 @@ it("delivers mirrored terminal input through durable user-authored outbox", asyn
   }
 });
 it("shows mode choices and binds callbacks to the saved card", async () => {
-  const { engine, store, transient, sendMessage, answerCallback } = setup();
+  const {
+    engine,
+    store,
+    transient,
+    sendMessage,
+    answerCallback,
+    editMessageText,
+  } = setup();
   transient.create.mockImplementation(
     async (_intent: unknown, send: () => Promise<number>) => send(),
   );
@@ -251,7 +253,10 @@ it("shows mode choices and binds callbacks to the saved card", async () => {
     await engine.accept([callback], 3);
     expect(store.getCursor("followup-mode")).toBe("steer");
     expect(answerCallback).toHaveBeenCalledWith("cb");
-    expect(transient.remove).toHaveBeenCalledWith("mode-card");
+    expect(transient.remove).not.toHaveBeenCalledWith("mode-card");
+    expect(editMessageText).toHaveBeenCalledWith("1", 88, expect.any(String), {
+      reply_markup: { inline_keyboard: [] },
+    });
     await engine.accept(
       [{ ...callback, updateId: 3, messageId: 999, callbackId: "stale" }],
       4,

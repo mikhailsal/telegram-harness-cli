@@ -22,7 +22,7 @@ import { Delivery } from "./delivery.js";
 import { DownNotice } from "./down-notice.js";
 import { TurnEngine } from "./engine.js";
 import { AlreadyRunningError, acquireDirectoryLock } from "./lock.js";
-import { runtimeLog } from "./log.js";
+import { runtimeLog, type RuntimeLog } from "./log.js";
 import { registerMenus } from "./runtime-menu.js";
 import { pollLoop, maintenanceLoop } from "./runtime-poll.js";
 import { offlineAdapter, stopped } from "./runtime-util.js";
@@ -121,6 +121,15 @@ function backgroundUpdate(
     })
     .catch(() => undefined);
 }
+function bridgeLog(
+  logger: RuntimeLog,
+  extra: RuntimeOptions["log"],
+): RuntimeContext["log"] {
+  return (event, details) => {
+    logger.write(event, details);
+    extra?.(event, details);
+  };
+}
 function makeContext(
   directory: string,
   config: Config,
@@ -130,6 +139,8 @@ function makeContext(
   options: RuntimeOptions,
 ): RuntimeContext {
   const now = options.now ?? (() => new Date());
+  const logger = runtimeLog(directory);
+  const log = bridgeLog(logger, options.log);
   const channel =
     options.channel ??
     new TelegramChannel({
@@ -138,12 +149,12 @@ function makeContext(
       language: config.language === "auto" ? "en" : config.language,
       hiddenTags: config.markup.tags.map((tag) => tag.name),
       signal,
+      log,
       ...(options.apiRoot ? { apiRoot: options.apiRoot } : {}),
       ...(options.fetch ? { fetch: options.fetch } : {}),
     });
   const notice = noticeFor(directory, channel);
   const entityId = entity(store, directory, token, now());
-  const logger = runtimeLog(directory);
   const ctx: RuntimeContext = {
     directory,
     config,
@@ -165,10 +176,7 @@ function makeContext(
       options.apiRoot,
       options.fetch,
     ),
-    log: (event, details) => {
-      logger.write(event, details);
-      options.log?.(event, details);
-    },
+    log,
     persistAdapter: () => {
       const session = store.getSession(ctx.sessionId);
       persistAdapter(ctx.adapter, store, session?.externalId);
@@ -212,7 +220,7 @@ async function serve(
         createFreshAdapter(context.directory, context.config, context.store)),
     startDaemon: daemonStarter(ctx, options),
   });
-  ctx.rotateSession = () => supervisor.rotate();
+  ctx.rotateSession = (updateId) => supervisor.rotate(updateId);
   backgroundUpdate(ctx.directory, ctx.config, options, ctx.signal);
   const interval = Math.max(10, options.tickIntervalMs ?? 1000);
   void registerMenus(ctx);

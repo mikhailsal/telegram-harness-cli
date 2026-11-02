@@ -105,6 +105,8 @@ export class OutboxStore extends MessageStore {
     return this.atomic(() => {
       const row = this.getOutbox(id);
       if (row?.status !== "sending") return false;
+      if (row.messageId !== null && row.messageId !== telegramMessageId)
+        throw new Error("Delivered message differs from its checkpoint");
       if (
         history.telegramMessageId !== telegramMessageId ||
         history.chatId !== row.chatId ||
@@ -136,6 +138,15 @@ export class OutboxStore extends MessageStore {
         .run(error, nextAttemptAt, id).changes === 1
     );
   }
+  checkpointMessage(id: string, messageId: number): boolean {
+    return (
+      this.db
+        .prepare(
+          "UPDATE outbox SET messageId=? WHERE id=? AND status='sending' AND (messageId IS NULL OR messageId=?)",
+        )
+        .run(messageId, id, messageId).changes === 1
+    );
+  }
   setDeliveryFormat(
     id: string,
     format: "rich" | "plain" | "document",
@@ -163,7 +174,7 @@ export class OutboxStore extends MessageStore {
     return Number(
       this.db
         .prepare(
-          "UPDATE outbox SET status='pending',possiblyDuplicated=1 WHERE status='sending'",
+          "UPDATE outbox SET status='pending',possiblyDuplicated=CASE WHEN messageId IS NULL THEN 1 ELSE possiblyDuplicated END WHERE status='sending'",
         )
         .run().changes,
     );

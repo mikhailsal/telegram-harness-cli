@@ -5,9 +5,11 @@ import type { AdapterEvent } from "../adapters/contract.js";
 import type { Turn } from "../store/index.js";
 import type { RuntimeContext } from "./context.js";
 import { Commands } from "./commands.js";
+import { confirmDeferredNew } from "./command-completions.js";
 import { TurnStatuses } from "./status.js";
 import { turnDraftId } from "./turn-draft.js";
 import { messageFormat } from "./format.js";
+import { recordExecution } from "./settings-audit.js";
 import type { CommandDelivery } from "./commands.js";
 import { AdapterEvents, activeTurn, queueRequestSummaries } from "./events.js";
 import {
@@ -276,10 +278,7 @@ export class TurnEngine {
     }
     if (this.ctx.store.getCursor("stop-pending") === "1")
       this.ctx.store.setCursor("stop-pending", "0");
-    if (this.ctx.store.getCursor("deferred-new") === "1") {
-      await this.ctx.rotateSession();
-      this.ctx.store.setCursor("deferred-new", "0");
-    }
+    await confirmDeferredNew(this.ctx);
     const turn = nextQueuedTurn(this.ctx);
     if (turn) {
       await this.submit(turn);
@@ -325,6 +324,7 @@ export class TurnEngine {
     )
       return;
     try {
+      recordExecution(this.ctx, turn, "steer");
       await this.ctx.adapter.steer(
         { correlationId: turn.id, text },
         active.externalTurnId,
@@ -364,6 +364,7 @@ export class TurnEngine {
     this.ctx.persistAdapter();
     this.statuses.refresh();
     try {
+      recordExecution(this.ctx, turn, "submit");
       const result = await this.ctx.adapter.submit({
         correlationId: turn.id,
         text,

@@ -5,11 +5,11 @@ import {
   classifyTelegramError,
   renderOutgoing,
 } from "../channels/index.js";
-import type { RenderChunk, SendOptions } from "../channels/index.js";
+import type { RenderChunk } from "../channels/index.js";
 import type { Outbox, OutboxInput, Turn } from "../store/index.js";
 import type { RuntimeContext } from "./context.js";
 import { replyTarget } from "./reply-target.js";
-import { turnDraftId } from "./turn-draft.js";
+import { deliveryOptions } from "./delivery-options.js";
 import { messageFormat } from "./format.js";
 
 const chunkSchema = z.strictObject({
@@ -219,7 +219,7 @@ export class Delivery {
       delivered = await channel.deliverChunk(
         row.chatId,
         renderedChunk,
-        this.sendOptions(row, chunk, automaticReply),
+        deliveryOptions(this.context, row, chunk, automaticReply),
       );
       if (delivered.messageIds[0] === undefined) {
         store.markFailed(row.id, "missing-message-id");
@@ -255,32 +255,6 @@ export class Delivery {
       (chunk.kind !== "photo" && chunk.kind !== "document") ||
       chunk.workspace === this.context.directory
     );
-  }
-  private sendOptions(
-    row: Outbox,
-    chunk: Chunk,
-    automaticReply: boolean | undefined,
-  ): SendOptions {
-    const turn = automaticReply
-      ? this.context.store.getTurn(row.turnId)
-      : undefined;
-    const replacesDraft =
-      turn &&
-      chunk.kind === "message" &&
-      this.context.channel.hasDraft(
-        row.chatId,
-        turnDraftId(turn),
-        chunk.style === "html" ? "regular" : "rich",
-      );
-    return {
-      silent: row.disableNotification,
-      ...(replacesDraft && row.replyToMessageId !== null
-        ? { fallbackReplyToMessageId: row.replyToMessageId }
-        : {}),
-      ...(row.replyToMessageId === null || replacesDraft
-        ? {}
-        : { replyToMessageId: row.replyToMessageId }),
-    };
   }
   private async record(
     row: Outbox,

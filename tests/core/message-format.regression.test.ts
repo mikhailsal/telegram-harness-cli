@@ -133,72 +133,42 @@ it("does not freeze an offline queued turn before the user changes its format", 
   }
 });
 
-function previewFixture(store: Store) {
-  const events: string[] = [];
-  let draft = false;
-  const finalizeDraft = vi
-    .fn()
-    .mockImplementationOnce(() => Promise.reject(new Error("offline")))
-    .mockImplementation(() => {
-      events.push("finalize-regular");
-      draft = false;
-      return Promise.resolve(999);
-    });
-  const ctx = context(store, false);
-  ctx.now = () => new Date();
-  ctx.channel = {
-    draft: () => {
-      events.push("draft-regular");
-      draft = true;
-      return Promise.resolve();
-    },
-    hasDraft: () => draft,
-    finalizeDraft,
-  } as unknown as RuntimeContext["channel"];
-  ctx.transient = {
-    create: (_intent: unknown, send: () => Promise<number>) => send(),
-    remove: (id: string) => {
-      if (id.endsWith("/discard")) events.push("delete-old-preview");
-      return Promise.resolve();
-    },
-  } as unknown as RuntimeContext["transient"];
-  const statuses = new TurnStatuses(ctx);
-  return { events, finalizeDraft, ctx, statuses };
-}
-
-it("clears the old queued preview family before final delivery and retries a failed clear", async () => {
+it("keeps the native preview family unchanged when the answer format changes", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date(at));
   const { store } = fixture();
-  const { events, finalizeDraft, ctx, statuses } = previewFixture(store);
+  const ctx = context(store, false);
+  const draft = vi.fn().mockResolvedValue(undefined);
+  const finalizeDraft = vi.fn().mockResolvedValue(999);
+  const remove = vi.fn().mockResolvedValue(undefined);
+  ctx.now = () => new Date();
+  ctx.channel = {
+    draft,
+    finalizeDraft,
+    hasDraft: () => true,
+  } as unknown as RuntimeContext["channel"];
+  ctx.transient = { remove } as unknown as RuntimeContext["transient"];
+  const statuses = new TurnStatuses(ctx);
   try {
     store.setCursor("chat-id", "1");
     store.setCursor("message-format/1", "regular");
     turn(store, "turn1", "telegram", "1");
     statuses.refresh();
     await vi.advanceTimersByTimeAsync(1);
-    expect(events).toEqual(["draft-regular"]);
+    expect(draft).toHaveBeenCalledWith(
+      1,
+      expect.any(Number),
+      expect.any(String),
+    );
     store.setCursor("message-format/1", "rich");
     store.transitionTurn("turn1", "queued", "active");
     const active = store.getTurn("turn1");
     if (!active) throw new Error("missing turn");
     expect(messageFormat(ctx, active)).toBe("rich");
-    expect(await statuses.pause(active.id)).toBe(false);
-    expect(store.getCursor(`status-move/${active.id}`)).toBeTruthy();
     expect(await statuses.pause(active.id)).toBe(true);
-    events.push("final-delivery");
-    expect(events).toEqual([
-      "draft-regular",
-      "finalize-regular",
-      "delete-old-preview",
-      "final-delivery",
-    ]);
-    expect(finalizeDraft).toHaveBeenLastCalledWith(
-      1,
-      expect.any(Number),
-      expect.any(String),
-      "regular",
-    );
+    expect(store.getCursor(`status-move/${active.id}`)).toBeUndefined();
+    expect(finalizeDraft).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
   } finally {
     await statuses.close();
     store.close();

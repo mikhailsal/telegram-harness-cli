@@ -4,6 +4,8 @@ import { parseUpdate } from "./ingress.js";
 import { renderOutgoing } from "./render.js";
 import { LocalMediaError, mediaBytes } from "./render-media.js";
 import { DraftLedger } from "./draft-ledger.js";
+import { logTelegramActivity } from "./activity.js";
+import { sendRegular } from "./regular-delivery.js";
 import type { RenderChunk } from "./render.js";
 import type {
   ChannelPollResult,
@@ -66,6 +68,7 @@ export class TelegramChannel {
       if (result.ok) this.drafts.track(method, payload);
       return result;
     });
+    if (options.log) logTelegramActivity(this, options.log);
   }
   hasDraft(
     chatId: string,
@@ -170,6 +173,7 @@ export class TelegramChannel {
       chunk,
       extra,
       options.fallbackReplyToMessageId,
+      options,
     );
     return { messageIds: [delivered.id], visibleText: delivered.text };
   }
@@ -181,6 +185,7 @@ export class TelegramChannel {
       reply_parameters?: { message_id: number };
     },
     fallbackReplyToMessageId?: number,
+    options: SendOptions = {},
   ): Promise<{ id: number; text: string }> {
     if (isLocalMedia(chunk)) return this.sendLocalMedia(chatId, chunk, extra);
     if (chunk.kind === "file") {
@@ -191,7 +196,31 @@ export class TelegramChannel {
       );
       return { id: message.message_id, text: chunk.text };
     }
-    if (chunk.style === "html") return this.sendHtml(chatId, chunk, extra);
+    if (chunk.style === "html")
+      return sendRegular(this.bot.api, chunk, {
+        chatId,
+        extra,
+        ...(options.consumeDraft === undefined
+          ? {}
+          : { consumeDraft: options.consumeDraft }),
+        ...(options.existingMessageId === undefined
+          ? {}
+          : { existingMessageId: options.existingMessageId }),
+        ...(options.onMessageCreated === undefined
+          ? {}
+          : { onMessageCreated: options.onMessageCreated }),
+      });
+    return this.sendRichChunk(chatId, chunk, extra, fallbackReplyToMessageId);
+  }
+  private async sendRichChunk(
+    chatId: string,
+    chunk: RenderChunk,
+    extra: {
+      disable_notification: boolean;
+      reply_parameters?: { message_id: number };
+    },
+    fallbackReplyToMessageId?: number,
+  ): Promise<{ id: number; text: string }> {
     try {
       const message = await this.bot.api.sendRichMessage(
         chatId,
@@ -225,30 +254,6 @@ export class TelegramChannel {
         );
         return { id: message.message_id, text: chunk.text };
       }
-    }
-  }
-  private async sendHtml(
-    chatId: string,
-    chunk: RenderChunk,
-    extra: {
-      disable_notification: boolean;
-      reply_parameters?: { message_id: number };
-    },
-  ): Promise<{ id: number; text: string }> {
-    try {
-      const message = await this.bot.api.sendMessage(chatId, chunk.text, {
-        ...extra,
-        parse_mode: "HTML",
-      });
-      return { id: message.message_id, text: chunk.plain };
-    } catch (error) {
-      if (classifyTelegramError(error).kind !== "bad-request") throw error;
-      const message = await this.bot.api.sendMessage(
-        chatId,
-        chunk.plain,
-        extra,
-      );
-      return { id: message.message_id, text: chunk.plain };
     }
   }
   private async sendLocalMedia(

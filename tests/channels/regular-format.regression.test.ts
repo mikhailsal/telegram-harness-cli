@@ -272,3 +272,44 @@ it("keeps a reference literal when its parsed definition is hidden", () => {
   );
   expect(result.chunks.map((chunk) => chunk.text).join("")).toBe("[x][sec]");
 });
+
+it("keeps a multiline quote intact across bold and italic phrases", () => {
+  const result = renderOutgoing(
+    "> Start **bold** and _italic_\n> next line",
+    [],
+    undefined,
+    "regular",
+  );
+  expect(result.chunks).toHaveLength(1);
+  expect(result.chunks[0]?.text).toBe(
+    "<blockquote>Start <b>bold</b> and <i>italic</i>\nnext line</blockquote>",
+  );
+});
+it("reopens one balanced quote at message boundaries without losing Unicode", () => {
+  const result = renderOutgoing(
+    `> **${"a".repeat(4095)}😀tail**`,
+    [],
+    undefined,
+    "regular",
+  );
+  expect(result.chunks).toHaveLength(2);
+  for (const chunk of result.chunks) {
+    expect(chunk.plain.length).toBeLessThanOrEqual(4096);
+    expect(chunk.text).toMatch(/^<blockquote><b>.*<\/b><\/blockquote>$/u);
+  }
+  expect(result.chunks.map((chunk) => chunk.plain).join("")).toBe(
+    `${"a".repeat(4095)}😀tail`,
+  );
+});
+it("keeps code and links outside quote entities that Telegram cannot nest", () => {
+  const result = renderOutgoing(
+    "> Before `code` and [site](https://example.com) after",
+    [],
+    undefined,
+    "regular",
+  );
+  expect(result.chunks[0]?.text).toBe(
+    '<blockquote>Before </blockquote><code>code</code><blockquote> and </blockquote><a href="https://example.com">site</a><blockquote> after</blockquote>',
+  );
+  expect(result.chunks[0]?.plain).toBe("Before code and site after");
+});

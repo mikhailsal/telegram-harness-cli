@@ -2,6 +2,7 @@ import { expect, it, vi } from "vitest";
 import type { ChannelEvent } from "../../src/channels/index.js";
 import { Commands } from "../../src/core/commands.js";
 import type { RuntimeContext } from "../../src/core/context.js";
+import { catalog } from "../../src/channels/index.js";
 
 const command: Extract<ChannelEvent, { kind: "command" }> = {
   kind: "command",
@@ -28,11 +29,14 @@ function setup(ready: boolean, active: boolean) {
   const service = new Commands(context, { finish: () => false });
   return { service, rotate, send, setCursor };
 }
-it("starts a new idle session without a synthetic acknowledgement", async () => {
+it("confirms a new idle session after it has started", async () => {
   const f = setup(true, false);
   await f.service.run(command);
-  expect(f.rotate).toHaveBeenCalledOnce();
-  expect(f.send).not.toHaveBeenCalled();
+  expect(f.rotate).toHaveBeenCalledWith(command.updateId);
+  expect(f.send).toHaveBeenCalledWith(
+    expect.objectContaining({ kind: "command" }),
+    catalog.en.newStarted,
+  );
 });
 it.each([
   [true, true],
@@ -43,6 +47,10 @@ it.each([
     const f = setup(ready, active);
     await f.service.run(command);
     expect(f.setCursor).toHaveBeenCalledWith("deferred-new", "1");
+    expect(f.setCursor).toHaveBeenCalledWith(
+      "deferred-new-command",
+      expect.stringContaining('"updateId":1'),
+    );
     expect(f.rotate).not.toHaveBeenCalled();
     expect(f.send).not.toHaveBeenCalled();
   },

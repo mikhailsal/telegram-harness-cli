@@ -41,6 +41,7 @@ export class Supervisor {
   private async activate(
     adapter: HarnessAdapter,
     previousSessionId?: string,
+    rotationUpdateId?: number,
   ): Promise<void> {
     const session = await adapter.newSession();
     if (stopped(this.ctx.signal))
@@ -61,6 +62,7 @@ export class Supervisor {
         describeAdapter(adapter, session.id),
         previousSessionId,
         session.cursor ?? "",
+        rotationUpdateId,
       )
     )
       throw new Error("Session activation lost its expected state");
@@ -302,7 +304,12 @@ export class Supervisor {
       )
       .catch(() => undefined);
   }
-  async rotate(): Promise<void> {
+  async rotate(updateId?: number): Promise<void> {
+    if (
+      updateId !== undefined &&
+      this.ctx.store.getCursor(`new-completed/${String(updateId)}`)
+    )
+      return;
     const prior = this.ctx.adapter;
     if (
       this.ctx.store.listTurns(["submitting", "active", "uncertain"]).length ||
@@ -311,7 +318,7 @@ export class Supervisor {
       throw new Error("Cannot rotate an active session");
     const next = await this.options.freshFactory(this.ctx);
     try {
-      await this.activate(next, this.ctx.sessionId);
+      await this.activate(next, this.ctx.sessionId, updateId);
     } catch (error) {
       if (next instanceof CodexTmuxAdapter)
         await next.terminateSession().catch(() => undefined);

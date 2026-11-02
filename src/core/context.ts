@@ -24,5 +24,5 @@ export interface RuntimeContext {
   now: () => Date;
   log: (event: string, details?: Record<string, unknown>) => void;
   persistAdapter: () => void;
-  rotateSession: () => Promise<void>;
+  rotateSession: (updateId?: number) => Promise<void>;
 }

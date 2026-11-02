@@ -40,27 +40,30 @@ class PreviewApi {
         };
       });
     }
-    if (method === "sendRichMessage") {
-      if (this.finalFailures-- > 0)
-        return Promise.resolve(
-          Response.json({
-            ok: false,
-            error_code: 429,
-            description: "wait",
-            parameters: { retry_after: 2 },
-          }),
-        );
-      this.visible = false;
-      const id = ++this.nextId;
-      this.messages.set(id, body);
-      return Promise.resolve(
-        Response.json({ ok: true, result: { message_id: id } }),
-      );
-    }
+    if (method === "sendRichMessage")
+      return Promise.resolve(this.richMessage(body));
+    if (method === "sendMessage")
+      return Promise.resolve(this.persistMessage(body));
     if (method === "deleteMessage")
       this.messages.delete(Number(body.message_id));
     return Promise.resolve(Response.json({ ok: true, result: true }));
   };
+  private richMessage(body: Record<string, unknown>): Response {
+    if (this.finalFailures-- > 0)
+      return Response.json({
+        ok: false,
+        error_code: 429,
+        description: "wait",
+        parameters: { retry_after: 2 },
+      });
+    this.visible = false;
+    return this.persistMessage(body);
+  }
+  private persistMessage(body: Record<string, unknown>): Response {
+    const id = ++this.nextId;
+    this.messages.set(id, body);
+    return Response.json({ ok: true, result: { message_id: id } });
+  }
 }
 
 function seedTurn(

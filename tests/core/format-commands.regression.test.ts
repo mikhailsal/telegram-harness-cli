@@ -85,7 +85,7 @@ it.each([
   },
 );
 it("updates a persistent per-chat format through the functional chooser", async () => {
-  const { store, sent, edit, answer, commands } = fixture();
+  const { store, sent, edit, answer, commands, transient } = fixture();
   try {
     expect(normalizeEvent(event)).toMatchObject({
       kind: "command",
@@ -110,10 +110,20 @@ it("updates a persistent per-chat format through the functional chooser", async 
     expect(store.getCursor("message-format/1")).toBe("regular");
     expect(answer).toHaveBeenCalledOnce();
     expect(edit).toHaveBeenCalledOnce();
+    expect(edit).toHaveBeenCalledWith(
+      "1",
+      10,
+      expect.stringContaining("Обычный"),
+      { reply_markup: { inline_keyboard: [] } },
+    );
     await commands.run({ ...event, updateId: 3, arguments: "invalid" });
     expect(store.getCursor("message-format/1")).toBe("regular");
     await commands.run({ ...event, updateId: 4, arguments: "rich" });
     expect(store.getCursor("message-format/1")).toBe("rich");
+    expect(transient.send).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.stringContaining("Rich"),
+    );
     await commands.run({
       ...event,
       chatId: "2",
@@ -139,5 +149,39 @@ it("keeps an explicit format across a store restart", async () => {
   } finally {
     store.close();
     rmSync(directory, { recursive: true, force: true });
+  }
+});
+it("retains a mode confirmation after selecting a button and on a direct argument", async () => {
+  const { store, sent, edit, answer, commands, transient } = fixture();
+  const mode = { ...event, command: "mode" };
+  try {
+    await commands.run(mode);
+    expect(sent).toHaveBeenCalledOnce();
+    const decision: Extract<ChannelEvent, { kind: "decision" }> = {
+      kind: "decision",
+      updateId: 2,
+      chatId: "1",
+      userId: "1",
+      messageId: 10,
+      callbackId: "mode-cb",
+      sentAt: event.sentAt,
+      language: "ru",
+      data: "mode:queue",
+    };
+    expect(await commands.decision(decision)).toBe(true);
+    expect(store.getCursor("followup-mode")).toBe("queue");
+    expect(answer).toHaveBeenCalledOnce();
+    expect(store.listTransients()).toHaveLength(1);
+    expect(edit).toHaveBeenCalledWith("1", 10, expect.any(String), {
+      reply_markup: { inline_keyboard: [] },
+    });
+    await commands.run({ ...mode, updateId: 3, arguments: "queue" });
+    const text = transient.send.mock.calls[0]?.[1];
+    expect(text).toBe(edit.mock.calls[0]?.[2]);
+    await commands.run({ ...mode, updateId: 4, arguments: "bad" });
+    expect(store.getCursor("followup-mode")).toBe("queue");
+    expect(sent).toHaveBeenCalledTimes(2);
+  } finally {
+    store.close();
   }
 });

@@ -59,6 +59,7 @@ export class QueueStore extends StoreBase {
     descriptor: string,
     previousSessionId?: string,
     cursor = "",
+    rotationUpdateId?: number,
   ): boolean {
     return this.atomic(() => {
       const active = this.getCursor("active-session");
@@ -82,6 +83,8 @@ export class QueueStore extends StoreBase {
       this.setCursor("adapter-descriptor", descriptor);
       this.setCursor("active-session", session.id);
       this.setCursor("adapter-cursor", cursor);
+      if (rotationUpdateId !== undefined)
+        this.setCursor(`new-completed/${String(rotationUpdateId)}`, session.id);
       return true;
     });
   }
@@ -164,6 +167,21 @@ export class QueueStore extends StoreBase {
         "INSERT INTO meta VALUES (?,?) ON CONFLICT(name) DO UPDATE SET value=excluded.value",
       )
       .run(name, value);
+  }
+  applySetting(
+    updateId: number,
+    cursor: string,
+    value: string,
+    audit: string,
+  ): boolean {
+    return this.atomic(() => {
+      const inserted = this.db
+        .prepare("INSERT OR IGNORE INTO meta VALUES (?, ?)")
+        .run(`setting-applied/${String(updateId)}`, audit).changes;
+      if (!inserted) return false;
+      this.setCursor(cursor, value);
+      return true;
+    });
   }
   getCursor(name: string): string | undefined {
     return (

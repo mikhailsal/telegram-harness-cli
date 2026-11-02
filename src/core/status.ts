@@ -7,7 +7,7 @@ import { nextQueuedTurn } from "./queue.js";
 import { turnDraftId } from "./turn-draft.js";
 import { replySourceMessageId } from "./reply-target.js";
 import { isCompactionOnly } from "./compaction.js";
-import { chatMessageFormat, messageFormat, turnChatId } from "./format.js";
+import { turnChatId } from "./format.js";
 
 interface Activity {
   kind: "thinking" | "command" | "read" | "file-change" | "compacting";
@@ -146,18 +146,11 @@ export class TurnStatuses {
       `status/${turn.id}`,
       this.ctx.config.status,
       this.ctx.now,
-      turn.status === "queued"
-        ? chatMessageFormat(this.ctx, chat)
-        : messageFormat(this.ctx, turn, chat),
     );
     this.rows.set(turn.id, status);
     return status;
   }
   async pause(id: string): Promise<boolean> {
-    const turn = this.ctx.store.getTurn(id);
-    const status = this.rows.get(id);
-    if (turn && status && !status.usesFormat(messageFormat(this.ctx, turn)))
-      this.requestMove(turn, true);
     if (!(await this.relocate(id))) return false;
     await this.rows.get(id)?.pause();
     return true;
@@ -218,8 +211,10 @@ export class TurnStatuses {
   }
   resumeUnsent(id: string): void {
     const delivered = this.ctx.store
-      .listOutbox(["sent"])
-      .some((row) => row.turnId === id && row.chunk >= 0);
+      .listOutbox(["sent", "pending", "sending", "failed"])
+      .some(
+        (row) => row.turnId === id && row.chunk >= 0 && row.messageId !== null,
+      );
     if (!delivered) this.rows.get(id)?.resume();
   }
   async remove(

@@ -30,6 +30,10 @@ export async function status(
   directory: string,
 ): Promise<Record<string, unknown>> {
   const owner = await readLockOwner(directory);
+  const defaultMode = await loadConfig(directory).then(
+    (config) => config.mode,
+    () => "queue" as const,
+  );
   const path = join(directory, ".thc", "store.db");
   const updateAvailable = await availableUpdate(directory);
   const updateCommand = updateAvailable
@@ -51,7 +55,7 @@ export async function status(
       pid: owner?.pid ?? null,
       failed: store.listOutbox(["failed"]).length,
       pending: store.listRequests(["pending", "answering"]).length,
-      mode: store.getCursor("mode") ?? "queue",
+      mode: store.getCursor("followup-mode") ?? defaultMode,
       activeTurns: store.listTurns(["submitting", "active", "uncertain"])
         .length,
       pollConflict: store.getCursor("poll-conflict") === "1",
