@@ -210,7 +210,25 @@ export class TelegramChannel {
           ? {}
           : { onMessageCreated: options.onMessageCreated }),
       });
+    await this.finishRichDraft(chatId, chunk, options.finalDraftId);
     return this.sendRichChunk(chatId, chunk, extra, fallbackReplyToMessageId);
+  }
+  private async finishRichDraft(
+    chatId: string,
+    chunk: RenderChunk,
+    draftId?: number,
+  ): Promise<void> {
+    if (draftId === undefined) return;
+    try {
+      await this.bot.api.sendRichMessageDraft(
+        Number(chatId),
+        draftId,
+        { markdown: chunk.text },
+        { can_stop: false },
+      );
+    } catch (error) {
+      if (classifyTelegramError(error).kind !== "bad-request") throw error;
+    }
   }
   private async sendRichChunk(
     chatId: string,

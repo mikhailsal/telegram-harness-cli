@@ -170,12 +170,12 @@ it.each(Array.from({ length: 8 }, (_, index) => index + 1))(
       const pendingBeforeDraft = f.store.listOutbox(["pending"]).length;
       f.api.release?.();
       await completion;
-      expect(f.api.applied).toEqual(["draft", "answer"]);
+      expect(f.api.applied).toEqual(["draft", "draft", "answer"]);
       expect(attemptsBeforeDraft).toBe(0);
       expect(pendingBeforeDraft).toBe(1);
       expect(f.api.draftVisible).toBe(false);
       await vi.advanceTimersByTimeAsync(40000);
-      expect(f.api.applied).toEqual(["draft", "answer"]);
+      expect(f.api.applied).toEqual(["draft", "draft", "answer"]);
       expect(f.store.listOutbox(["sent"])).toHaveLength(1);
     } finally {
       f.api.release?.();

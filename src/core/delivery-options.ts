@@ -40,6 +40,19 @@ function matchingDraft(
     ),
   );
 }
+function richDraftOptions(
+  ctx: RuntimeContext,
+  row: Outbox,
+  chunk: Chunk,
+): SendOptions {
+  if (ctx.config.status !== "draft") return {};
+  if (row.chunk < 0 || chunk.kind !== "message" || chunk.style === "html")
+    return {};
+  const turn = ctx.store.getTurn(row.turnId);
+  return turn && matchingDraft(ctx, row, chunk)
+    ? { finalDraftId: turnDraftId(turn) }
+    : {};
+}
 export function deliveryOptions(
   ctx: RuntimeContext,
   row: Outbox,
@@ -53,6 +66,7 @@ export function deliveryOptions(
   return {
     silent: row.disableNotification,
     ...conversion,
+    ...richDraftOptions(ctx, row, chunk),
     ...(replacesDraft && row.replyToMessageId !== null
       ? { fallbackReplyToMessageId: row.replyToMessageId }
       : {}),

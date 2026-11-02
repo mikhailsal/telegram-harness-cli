@@ -55,6 +55,7 @@ export interface DeliveryResult {
   visibleText: string;
 }
 export interface SendOptions {
+  finalDraftId?: number;
   consumeDraft?: boolean;
   existingMessageId?: number;
   onMessageCreated?: (messageId: number) => void;
