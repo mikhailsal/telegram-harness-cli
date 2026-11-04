@@ -109,8 +109,9 @@ export class Commands {
   }
   private async status(event: Command, active: Turn[]): Promise<void> {
     const strings = catalog[event.language];
-    const mode =
-      this.ctx.store.getCursor("followup-mode") ?? this.ctx.config.mode;
+    const mode = effectiveSettings(this.ctx, event.chatId).mode;
+    const modeLabel =
+      mode === "steer" ? strings.chooseSteer : strings.chooseQueue;
     const session = this.ctx.store.getSession(this.ctx.sessionId);
     const update = await this.availableUpdate();
     await this.reply(
@@ -118,7 +119,7 @@ export class Commands {
       [
         `${strings.statusFolder}: ${this.ctx.directory}`,
         `${strings.statusHarness}: ${this.ctx.config.codex.adapter}`,
-        `${strings.statusMode}: ${mode}`,
+        `${strings.statusMode}: ${modeLabel}`,
         active.length ? strings.working : strings.idle,
         session?.startedAt ?? "",
         update

@@ -14,7 +14,9 @@ signals only the process that owns the folder lock. `thc attach` waits for the
 active turn; `thc attach --now` requests an interrupt when the turn is known.
 
 In Telegram, `/mode queue|steer` controls follow-ups and `/format rich|regular`
-selects the next turn's answer format. Without an argument, either command opens
+selects the next turn's answer format. The mode chooser, confirmations and
+Telegram status use the same names: Queue and Steer (send immediately), with
+localized explanations. Without an argument, either command opens
 a chooser. Direct arguments and button selections produce the same temporary
 confirmation; the next request clears it. Answer format does not change the
 animated service status. `/new` and completed standalone compaction also produce
