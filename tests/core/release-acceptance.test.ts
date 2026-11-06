@@ -159,18 +159,35 @@ async function initializeArtifact(root: string): Promise<void> {
   await writeFile(join(root, "package.json"), '{"type":"module"}');
   await writeFile(join(root, "npm-shrinkwrap.json"), "{}");
 }
+async function copyInstalledModules(root: string): Promise<void> {
+  const { cp, mkdir, readdir } = await import("node:fs/promises");
+  const { constants } = await import("node:fs");
+  const source = resolve("node_modules");
+  const destination = join(root, "node_modules");
+  await mkdir(destination);
+  const results = await Promise.allSettled(
+    (await readdir(source)).map((name) =>
+      cp(join(source, name), join(destination, name), {
+        recursive: true,
+        mode: constants.COPYFILE_FICLONE,
+      }),
+    ),
+  );
+  const failures = results.filter((result) => result.status === "rejected");
+  if (failures.length)
+    throw new AggregateError(
+      failures.map((failure): unknown => failure.reason),
+      "Failed to clone installed dependencies",
+    );
+}
 it("checks live scenarios without modifying the isolated artifact", async () => {
   const { cp, mkdtemp, rm } = await import("node:fs/promises");
-  const { constants } = await import("node:fs");
   const { tmpdir } = await import("node:os");
   const root = await mkdtemp(join(tmpdir(), "thc-live-checks-"));
   try {
     await initializeArtifact(root);
     await cp(resolve("src"), join(root, "src"), { recursive: true });
-    await cp(resolve("node_modules"), join(root, "node_modules"), {
-      recursive: true,
-      mode: constants.COPYFILE_FICLONE,
-    });
+    await copyInstalledModules(root);
     await rm(join(root, "node_modules/.vite-temp"), {
       recursive: true,
       force: true,

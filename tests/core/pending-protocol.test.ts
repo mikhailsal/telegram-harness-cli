@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, open, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
@@ -42,6 +42,8 @@ function respond(
 }
 async function setup() {
   const root = await mkdtemp(join(tmpdir(), "thc-question-"));
+  // Keep the socket isolated in TMPDIR while using a short kernel pathname.
+  const socketDirectory = await open(root, "r");
   const server = createServer();
   const ws = new WebSocketServer({ server });
   const results: Message[] = [];
@@ -63,7 +65,7 @@ async function setup() {
       );
     });
   });
-  const path = join(root, "socket");
+  const path = `/proc/self/fd/${String(socketDirectory.fd)}/socket`;
   await new Promise<void>((resolve) => server.listen(path, resolve));
   const adapter = new ProtocolAdapter({
     socketPath: path,
@@ -85,6 +87,7 @@ async function setup() {
           else resolve();
         }),
       );
+      await socketDirectory.close();
       await rm(root, { recursive: true, force: true });
     },
   };
