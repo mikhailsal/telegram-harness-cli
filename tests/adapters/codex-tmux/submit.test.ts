@@ -116,56 +116,58 @@ it("never resends an uncertain input and refuses unsupported approval", async ()
   }
 });
 
-it("interrupts only the identified active turn and awaits an abort record", async () => {
-  const { adapter, home, key } = await setup();
-  adapter.options.ackTimeoutMs = 1000;
-  const descriptor = adapter.snapshot();
-  const day = new Date(descriptor.startedAt)
-    .toISOString()
-    .slice(0, 10)
-    .replaceAll("-", "/");
-  const dir = join(home, "sessions", day);
-  const path = join(dir, "rollout.jsonl");
-  try {
-    await mkdir(dir, { recursive: true });
-    await writeStartedRollout(
-      join(dir, "unrelated.jsonl"),
-      home,
-      "another-originator",
-    );
-    await writeStartedRollout(path, home, descriptor.originator);
-    vi.spyOn(TmuxRunner.prototype, "capture").mockResolvedValue(
-      await screen("busy"),
-    );
-    key.mockImplementation(async () => {
-      await appendFile(
-        path,
-        JSON.stringify({
-          type: "event_msg",
-          payload: {
-            type: "turn_aborted",
-            turn_id: "turn-1",
-            reason: "interrupted",
-          },
-        }) + "\n",
+it.each(["busy", "busy-dynamic-header"])(
+  "interrupts the identified active turn with %s and awaits an abort record",
+  async (pane) => {
+    const { adapter, home, key } = await setup();
+    adapter.options.ackTimeoutMs = 1000;
+    const descriptor = adapter.snapshot();
+    const dir = rolloutDirectory(home, descriptor.startedAt);
+    const path = join(dir, "rollout.jsonl");
+    try {
+      await mkdir(dir, { recursive: true });
+      await writeStartedRollout(
+        join(dir, "unrelated.jsonl"),
+        home,
+        "another-originator",
       );
-    });
-    await expect(adapter.interrupt("other-turn")).rejects.toThrow("not active");
-    expect(key).not.toHaveBeenCalled();
-    await expect(adapter.interrupt("turn-1")).resolves.toBeUndefined();
-    expect(key).toHaveBeenCalledTimes(1);
-    expect(await adapter.reconcile()).toContainEqual(
-      expect.objectContaining({
-        kind: "turn-completed",
-        turnId: "turn-1",
-        data: { status: "aborted", reason: "interrupted" },
-      }),
-    );
-  } finally {
-    await adapter.close();
-    await rm(home, { recursive: true, force: true });
-  }
-});
+      await writeStartedRollout(path, home, descriptor.originator);
+      vi.spyOn(TmuxRunner.prototype, "capture").mockResolvedValue(
+        await screen(pane),
+      );
+      key.mockImplementation(async () => {
+        await appendFile(
+          path,
+          JSON.stringify({
+            type: "event_msg",
+            payload: {
+              type: "turn_aborted",
+              turn_id: "turn-1",
+              reason: "interrupted",
+            },
+          }) + "\n",
+        );
+      });
+      await expect(adapter.interrupt("other-turn")).rejects.toThrow(
+        "not active",
+      );
+      expect(key).not.toHaveBeenCalled();
+      await expect(adapter.interrupt("turn-1")).resolves.toBeUndefined();
+      expect(key).toHaveBeenCalledTimes(1);
+      expect(key).toHaveBeenCalledWith(descriptor.identity, "Escape");
+      expect(await adapter.reconcile()).toContainEqual(
+        expect.objectContaining({
+          kind: "turn-completed",
+          turnId: "turn-1",
+          data: { status: "aborted", reason: "interrupted" },
+        }),
+      );
+    } finally {
+      await adapter.close();
+      await rm(home, { recursive: true, force: true });
+    }
+  },
+);
 
 async function writeStartedRollout(
   path: string,

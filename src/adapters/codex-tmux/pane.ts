@@ -11,9 +11,15 @@ export function parsePane(pane: string): PaneState {
   const { start, footer } = frame;
   const previous = lines.slice(0, start).filter(Boolean).at(-1) ?? "";
   if (lines[start]?.startsWith("› /")) return { kind: "unknown" };
-  if (/^[•◦] (?:Working|Reconnecting).*esc to interrupt/u.test(previous))
-    return { kind: "busy" };
+  if (isBusyStatus(previous)) return { kind: "busy" };
   return composerState(lines, start, footer);
+}
+
+function isBusyStatus(line: string): boolean {
+  // Codex changes the heading while reasoning; the timer and key hint identify it.
+  return /^[•◦] \S.* \((?:\d+h \d{2}m \d{2}s|\d+m \d{2}s|\d+s) • esc to interrupt\)(?: · .+)?$/u.test(
+    line,
+  );
 }
 function currentFrame(
   lines: string[],
@@ -76,5 +82,5 @@ export function isCleanBusyPane(pane: string): boolean {
     return false;
   if (lines.slice(frame.start + 1, frame.footer).some(Boolean)) return false;
   const previous = lines.slice(0, frame.start).filter(Boolean).at(-1) ?? "";
-  return /^[•◦] (?:Working|Reconnecting).*esc to interrupt/u.test(previous);
+  return isBusyStatus(previous);
 }

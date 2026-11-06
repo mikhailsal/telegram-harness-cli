@@ -70,3 +70,49 @@ it("retains the measured padded-paste fixture and unpadded provider bytes", asyn
   expect(rollout).toBe(envelope);
   expect(envelope).toContain(`\n${payload}\n</telegram-message>`);
 });
+
+it.each([
+  ["Preparing second poll", "1m 27s"],
+  ["Inspecting the command", "0s"],
+  ["Проверяю команду", "2h 03m 09s"],
+  ["Reviewing (initial) results", "59m 59s"],
+])("recognizes the current busy status %s", async (heading, elapsed) => {
+  const pane = (await fixture("busy-dynamic-header")).replace(
+    "Preparing second poll (1m 27s",
+    `${heading} (${elapsed}`,
+  );
+  expect(parsePane(pane)).toEqual({ kind: "busy" });
+  expect(isCleanBusyPane(pane)).toBe(true);
+});
+
+it.each([
+  "◦ Preparing second poll • esc to interrupt",
+  "◦ Preparing second poll (soon • esc to interrupt)",
+  "◦ Preparing second poll (1m 27s • esc to interrupting)",
+  "◦ Preparing second poll (1m 27s • esc to interrupt) unexpected content",
+])("refuses a malformed busy indicator: %s", async (indicator) => {
+  const pane = (await fixture("busy-dynamic-header")).replace(
+    /^◦ Preparing second poll.*$/mu,
+    indicator,
+  );
+  expect(isCleanBusyPane(pane)).toBe(false);
+});
+
+it("keeps composer and modal guards with a dynamic busy header", async () => {
+  const pane = await fixture("busy-dynamic-header");
+  expect(
+    isCleanBusyPane(pane.replace("› Ask Codex to do anything", "› owner text")),
+  ).toBe(false);
+  expect(
+    isCleanBusyPane(pane.replace("› Ask Codex to do anything", "› /model")),
+  ).toBe(false);
+  expect(
+    isCleanBusyPane(
+      pane.replace(
+        "› Ask Codex to do anything",
+        "› Ask Codex to do anything\n  owner text",
+      ),
+    ),
+  ).toBe(false);
+  expect(isCleanBusyPane(pane + "\n  enter select · esc back\n")).toBe(false);
+});
