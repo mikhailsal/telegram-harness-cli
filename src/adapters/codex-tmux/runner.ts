@@ -44,6 +44,8 @@ export class TmuxRunner {
       `CODEX_INTERNAL_ORIGINATOR_OVERRIDE=${originator}`,
       executable,
       "--no-daemon",
+      "-c",
+      "check_for_update_on_startup=false",
       "-a",
       "never",
       "-s",

@@ -68,7 +68,10 @@ beforeEach(() => {
   state.input = "";
   state.failure = false;
 });
-it("starts Codex as a dedicated pane with explicit sandbox and originator", async () => {
+// Regression: startup update prompts block input to owned tmux sessions.
+// Found by /qa on 2026-11-07.
+// Report: .quality/qa-reports/final-regression-20261107/run-20261107T204915Z
+it("starts an owned pane without update prompts and with explicit sandbox", async () => {
   const runner = new TmuxRunner("thc-owned");
   expect(
     await runner.start(
@@ -98,6 +101,8 @@ it("starts Codex as a dedicated pane with explicit sandbox and originator", asyn
     "CODEX_INTERNAL_ORIGINATOR_OVERRIDE=thc-marker",
     "/bin/codex",
     "--no-daemon",
+    "-c",
+    "check_for_update_on_startup=false",
     "-a",
     "never",
     "-s",

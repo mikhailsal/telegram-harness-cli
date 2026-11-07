@@ -9,6 +9,10 @@ guarded tmux runner. Their measured compatibility baseline is Codex CLI
 0.166.0. See the [protocol](docs/spikes/codex-two-clients.md) and
 [tmux](docs/spikes/codex-tmux-input.md) experiments.
 
+The tmux runner disables Codex's interactive startup update check for its
+owned sessions. Manage Codex versions outside those sessions and use `thc doctor`
+to compare the installed version with the tested baseline.
+
 ## Getting started
 
 Use Linux, Node.js 24.22.0 or newer, Git, Codex CLI and an existing Codex
