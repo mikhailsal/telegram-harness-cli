@@ -150,6 +150,17 @@ tests = { unit = ["tests"], e2e = ["e2e"] }
 capabilities = ["ui"]
 scenarios = "scenarios.toml"
 
+[[components]]
+id = "telegram-harness-cli"
+role = "application"
+profile = "typescript"
+target = "node"
+root = "."
+source = ["src", "scripts"]
+tests = { unit = ["tests/fakes", "tests/live", "tests/adapters", "tests/channels", "tests/cli", "tests/core", "tests/history", "tests/store"], integration = ["tests/integration"], e2e = ["tests/crash", "tests/e2e"] }
+capabilities = ["cli", "database", "migrations", "queues", "authorization"]
+scenarios = "scenarios.toml"
+
 # The CI wrapper contract (decision 0015): `required` is the one status that
 # hosting protection requires, and it fails unless every job below succeeded.
 # Control files (derived from this policy, plus `control`) need an owner in
@@ -202,6 +213,14 @@ reason = "Sanitized line-delimited protocol and rollout fixtures."
 pattern = "tests/fixtures/**/*.txt"
 category = "assets"
 reason = "Sanitized captured input and output fixtures, not documentation."
+
+[[exceptions]]
+rule = "markdown.lint"
+path = "skills/telegram-history/SKILL.md"
+symbol = "MD041"
+reason = "Agent skill discovery requires YAML frontmatter as the first content in SKILL.md."
+owner = "telegram-harness-cli maintainers"
+review = 2027-10-31
 
 [[classification]]
 pattern = ".gstack-redact-allowlist"

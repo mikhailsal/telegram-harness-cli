@@ -1,0 +1,12 @@
+› run a synthetic wait command
+
+• Running the command once and waiting for it to finish.
+
+• The command is still running; waiting for it to finish.
+
+◦ Preparing second poll (1m 27s • esc to interrupt) · 1 background terminal running · /ps to view · /stop to close
+
+
+› Ask Codex to do anything
+
+  fixture-model default · <WORKSPACE>

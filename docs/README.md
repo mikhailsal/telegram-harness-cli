@@ -1,5 +1,14 @@
 # Documentation index
 
+## Telegram bridge
+
+- [Codex two-client spike](spikes/codex-two-clients.md): shared-thread
+  protocol, recovery, approvals, and the selected adapter branch.
+- [Codex tmux input spike](spikes/codex-tmux-input.md): composer states,
+  multiline paste, and the decision to disable automatic retyping.
+- [Codex originator live smoke](spikes/codex-live-smoke.md): a minimal
+  real-provider check of the tmux originator override.
+
 ## Decisions
 
 | Decision                                               | Topic                                                                                        |
@@ -53,3 +62,10 @@
 - [Agent instructions](../AGENTS.md): setup and the everyday commands.
 - [Reference browser application](../examples/web/README.md): the React +
   Vite example component and the scenarios it proves.
+
+- [CLI error reference](errors.md)
+- [CLI guide](cli.md)
+- [Testing guide](testing.md)
+- [Release checklist](release-checklist.md)
+
+- [Telegram history skill](../skills/telegram-history/SKILL.md)

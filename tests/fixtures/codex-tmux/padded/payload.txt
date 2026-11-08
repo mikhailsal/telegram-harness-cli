@@ -1,0 +1,4 @@
+  leading	text  
+blank follows
+
+  final spaces   

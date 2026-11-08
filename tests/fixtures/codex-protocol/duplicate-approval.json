@@ -1,0 +1,50 @@
+{
+  "duplicate_approval_sent": [
+    {
+      "id": 0,
+      "result": {
+        "decision": "accept"
+      }
+    },
+    {
+      "id": 0,
+      "result": {
+        "decision": "accept"
+      }
+    }
+  ],
+  "approval_effect": "x",
+  "approval_execution_events": [
+    {
+      "method": "item/completed",
+      "params": {
+        "item": {
+          "type": "commandExecution",
+          "id": "call-10",
+          "pluginId": null,
+          "scriptPath": null,
+          "command": "/bin/bash -lc 'printf THC_SPIKE_APPROVED; printf x >> approval-count.txt'",
+          "cwd": "<SPIKE>/work",
+          "processId": "87619",
+          "source": "unifiedExecStartup",
+          "status": "completed",
+          "commandActions": [
+            {
+              "type": "unknown",
+              "command": "printf THC_SPIKE_APPROVED; printf x >> approval-count.txt"
+            }
+          ],
+          "aggregatedOutput": "THC_SPIKE_APPROVED",
+          "exitCode": 0,
+          "durationMs": 0,
+          "startedAtMs": 1793450352633,
+          "completedAtMs": 1793450353099
+        },
+        "threadId": "01a191f8-6101-7883-bede-c2d12453c8ed",
+        "turnId": "01a191f8-9dd2-7400-8e37-79b8cc8d582f",
+        "completedAtMs": 1793450353099
+      },
+      "emittedAtMs": 1793450353109
+    }
+  ]
+}
