@@ -221,3 +221,8 @@ symbol = "MD041"
 reason = "Agent skill discovery requires YAML frontmatter as the first content in SKILL.md."
 owner = "telegram-harness-cli maintainers"
 review = 2027-10-31
+
+[[classification]]
+pattern = ".gstack-redact-allowlist"
+category = "assets"
+reason = "Exact synthetic URL fixture spans for the publication credential guard."
