@@ -18,7 +18,7 @@ from quality.policy import Profile
 from quality.testing import StaticRequest
 from quality.testkit.candidates import pinned_tools
 from quality.testkit.gitrepo import GitRepo
-from quality.testkit.policies import ComponentSpec, build_policy, policy_toml
+from quality.testkit.policies import ComponentSpec, build_policy, classification_toml, policy_toml
 from quality.testkit.suites import ScriptedRunner
 
 TODAY = date(2026, 10, 20)
@@ -192,13 +192,20 @@ def test_an_adapter_whose_parser_fails_still_reports_its_gates(project: GitRepo)
 
 
 def test_the_static_request_names_configuration_scripts_and_resources(project: GitRepo) -> None:
+    project.write(
+        "quality.toml",
+        policy_toml(PY, web(), extra=classification_toml("web/install.sh", "config")),
+    )
+    project.write("web/install.sh", "#!/bin/sh\necho ready\n")
     project.write("web/eslint.config.js", "export default [];\n")
     project.write("web/package.json", "{}\n")
     project.write("web/src/app.css", "a {}\n")
     project.write("web/dist/app.js.map", "{}\n")
     project.git("add", "-A")
     adapter = ScriptedRunner({}, cover=True)
-    check(project, adapter)
+    report = check(project, adapter)
+    assert rules_of(report) == []
     (request,) = adapter.statics
+    assert request.files == ("web/src/api.ts", "web/src/core.ts", "web/tests/core.test.ts")
     assert request.configs == ("web/eslint.config.js",)
-    assert request.resources == ("web/package.json", "web/src/app.css")
+    assert request.resources == ("web/install.sh", "web/package.json", "web/src/app.css")

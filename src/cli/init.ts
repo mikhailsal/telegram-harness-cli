@@ -1,11 +1,10 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { createHash } from "node:crypto";
+import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { createInterface } from "node:readline/promises";
+import { readLockOwner } from "../core/lock.js";
 import { openStore, Store } from "../store/index.js";
 import { writeAgentInstructions } from "./skill.js";
-import { respondWithPrivateIds } from "./identity.js";
 import { doctor } from "./admin.js";
+import { respondWithPrivateIds } from "./identity.js";
 import { configSchema, loadConfig, resolveToken } from "../core/config.js";
 import type { CliDependencies } from "./context.js";
 import type { Arguments } from "./arguments.js";
@@ -13,35 +12,22 @@ import { allowedFlags, flag } from "./arguments.js";
 import { CliError } from "./errors.js";
 import { exists } from "./paths.js";
 import { install, registerFolder } from "./install.js";
+import {
+  interactiveToken,
+  persistToken,
+  requiredInput,
+  verifyCodex,
+} from "./onboarding.js";
+import { withBotBinding } from "./bot-binding.js";
+import { withSetupLock } from "./setup-lock.js";
+import { configureUnit, isActive } from "./service-unit.js";
+import {
+  alreadyRunning,
+  configuredDirectory,
+  installedTarget,
+  reportCliPath,
+} from "./init-options.js";
 
-async function input(
-  value: string | undefined,
-  name: string,
-  deps: CliDependencies,
-): Promise<string> {
-  if (value) return value;
-  if (!deps.isTTY)
-    throw new CliError(
-      "E_NEEDS_INPUT",
-      `Missing required --${name}`,
-      `thc init --${name} VALUE --help`,
-      2,
-    );
-  const rl = createInterface({ input: process.stdin, output: process.stderr });
-  try {
-    const answer = (await rl.question(`${name}: `)).trim();
-    if (!answer)
-      throw new CliError(
-        "E_NEEDS_INPUT",
-        `Missing required --${name}`,
-        `thc init --${name} VALUE --help`,
-        2,
-      );
-    return answer;
-  } finally {
-    rl.close();
-  }
-}
 async function ignoreState(directory: string): Promise<void> {
   const path = join(directory, ".gitignore");
   const prior = (await exists(path)) ? await readFile(path, "utf8") : "";
@@ -55,42 +41,6 @@ async function ignoreState(directory: string): Promise<void> {
     path,
     `${prior}${prior && !prior.endsWith("\n") ? "\n" : ""}.thc/\n`,
   );
-}
-function unitQuote(value: string): string {
-  if (/[\r\n\0]/.test(value))
-    throw new CliError(
-      "E_USAGE",
-      "Invalid path for a systemd unit",
-      "thc init --help",
-      2,
-    );
-  return `"${value.replace(/%/g, "%%").replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-}
-async function configureUnit(
-  home: string,
-  directory: string,
-  version: string,
-  path: string | undefined,
-): Promise<string> {
-  const units = join(home, ".config", "systemd", "user");
-  await mkdir(units, { recursive: true });
-  const id = createHash("sha256").update(directory).digest("hex").slice(0, 24);
-  const name = `thc-${id}.service`;
-  const executable = join(
-    home,
-    ".local",
-    "share",
-    "thc",
-    version,
-    "dist",
-    "cli",
-    "main.js",
-  );
-  const environment =
-    path === undefined ? "" : `Environment=${unitQuote(`PATH=${path}`)}\n`;
-  const text = `[Unit]\nDescription=Telegram harness bridge\nAfter=network-online.target\n\n[Service]\nType=simple\nWorkingDirectory=${unitQuote(directory)}\n${environment}ExecStart=${unitQuote(process.execPath)} ${unitQuote(executable)} start --dir ${unitQuote(directory)}\nRestart=on-failure\n\n[Install]\nWantedBy=default.target\n`;
-  await writeFile(join(units, name), text, { mode: 0o600 });
-  return name;
 }
 async function packageVersion(root: string): Promise<string> {
   const data: unknown = JSON.parse(
@@ -131,15 +81,17 @@ async function userIdInput(
   token: string,
   deps: CliDependencies,
 ): Promise<string> {
-  if (value || !deps.isTTY) return input(value, "user-id", deps);
+  if (value || !deps.isTTY) return requiredInput(value, "user-id", deps);
   const controller = new AbortController();
   const polling = respondWithPrivateIds(token, controller.signal).catch(() => {
     if (!controller.signal.aborted)
       deps.stderr("Unable to poll Telegram for your ID; enter it manually.\n");
   });
   try {
-    deps.stderr("Send a private message to the bot to receive your user ID.\n");
-    return await input(undefined, "user-id", deps);
+    deps.stderr(
+      "Send a private message to your bot; it will reply with your numeric user ID. Enter that ID here to authorize it.\n",
+    );
+    return await requiredInput(undefined, "user-id", deps);
   } finally {
     controller.abort();
     await polling;
@@ -148,16 +100,16 @@ async function userIdInput(
 async function configForInit(
   args: Arguments,
   deps: CliDependencies,
-  directory: string,
+  token: string,
+  secret: string,
 ) {
-  if (args.flags.has("update") || flag(args, "to"))
-    return loadConfig(directory);
-  const token = resolve(
-    await input(flag(args, "token-file"), "token-file", deps),
-  );
-  const secret = await tokenValue({ file: token }, directory, deps);
   const userId = Number(await userIdInput(flag(args, "user-id"), secret, deps));
-  const sandbox = await input(flag(args, "sandbox"), "sandbox", deps);
+  const sandbox = await requiredInput(
+    flag(args, "sandbox"),
+    "sandbox",
+    deps,
+    "Sandbox (read-only, workspace-write, or danger-full-access): ",
+  );
   const parsed = configSchema.safeParse({
     token: { file: token },
     allowlist: [userId],
@@ -172,7 +124,6 @@ async function configForInit(
       "thc init --help",
       3,
     );
-  await tokenValue(parsed.data.token, directory, deps);
   return parsed.data;
 }
 async function waitForFirstAnswer(
@@ -229,43 +180,26 @@ async function checkLinger(
     'User linger is not enabled or could not be checked; run: loginctl enable-linger "$USER"\n',
   );
 }
-async function verifyCodex(
-  directory: string,
-  config: Awaited<ReturnType<typeof loadConfig>>,
-  deps: CliDependencies,
-): Promise<void> {
-  try {
-    await deps.exec(config.codex.executable, ["--version"], {
-      cwd: directory,
-      env: deps.env,
-    });
-    await deps.exec(config.codex.executable, ["login", "status"], {
-      cwd: directory,
-      env: deps.env,
-    });
-  } catch {
-    throw new CliError(
-      "E_DEPENDENCY",
-      "Codex is unavailable or not signed in",
-      "codex login",
-      4,
-    );
-  }
-}
 async function enableService(
   unit: string,
   directory: string,
   config: Awaited<ReturnType<typeof loadConfig>>,
   deps: CliDependencies,
   restart: boolean,
+  existing: boolean,
 ): Promise<void> {
+  if (
+    !restart &&
+    ((await isActive(directory, deps)) || (await readLockOwner(directory)))
+  )
+    return;
   if (restart)
     await deps.exec("systemctl", ["--user", "stop", unit], { env: deps.env });
   const start = new Date(deps.now()).toISOString();
   const store = openStore(join(directory, ".thc", "store.db"));
   try {
-    store.setCursor("first-delivery-at", "");
-    store.setCursor("welcome-pending", start);
+    if (!existing) store.setCursor("first-delivery-at", "");
+    if (!existing) store.setCursor("welcome-pending", start);
   } finally {
     store.close();
   }
@@ -273,7 +207,7 @@ async function enableService(
   await deps.exec("systemctl", ["--user", "enable", "--now", unit], {
     env: deps.env,
   });
-  await waitForFirstAnswer(directory, config, start, deps);
+  if (!existing) await waitForFirstAnswer(directory, config, start, deps);
 }
 async function writeInstalledState(
   directory: string,
@@ -281,6 +215,7 @@ async function writeInstalledState(
   config: Awaited<ReturnType<typeof loadConfig>>,
   args: Arguments,
   deps: CliDependencies,
+  existing: boolean,
 ): Promise<void> {
   const configPath = join(directory, ".thc", "config.json");
   await mkdir(join(directory, ".thc"), { recursive: true, mode: 0o700 });
@@ -309,6 +244,7 @@ async function writeInstalledState(
       config,
       deps,
       args.flags.has("update") || Boolean(flag(args, "to")),
+      existing,
     );
 }
 export async function init(
@@ -332,21 +268,75 @@ export async function init(
       "thc init --help",
       2,
     );
-  const directory = resolve(flag(args, "dir") ?? deps.cwd);
-  const config = await configForInit(args, deps, directory);
-  await tokenValue(config.token, directory, deps);
+  const directory = await realpath(resolve(flag(args, "dir") ?? deps.cwd));
+  await withSetupLock(deps.home, `project:${directory}`, async () =>
+    initialize(args, deps, await configuredDirectory(directory)),
+  );
+}
+async function initialize(
+  args: Arguments,
+  deps: CliDependencies,
+  directory: string,
+): Promise<void> {
   const configPath = join(directory, ".thc", "config.json");
-  if (
-    !args.flags.has("update") &&
-    !flag(args, "to") &&
-    (await exists(configPath))
-  )
-    throw new CliError(
-      "E_CONFIG",
-      "This folder is already initialized",
-      "thc init --update --no-start",
-      3,
-    );
+  const existing = await exists(configPath);
+  if (!existing && (args.flags.has("update") || flag(args, "to"))) {
+    await loadConfig(directory);
+  }
+  const prior = existing ? await loadConfig(directory) : undefined;
+  const credentials = await initCredentials(args, deps, directory, prior);
+  await withBotBinding(
+    deps.home,
+    directory,
+    credentials.secret,
+    deps.env,
+    async () => {
+      if (prior && (await alreadyRunning(args, directory, deps, isActive))) {
+        deps.stdout(`Already initialized and running: ${directory}.\n`);
+        return;
+      }
+      await completeInit(args, deps, directory, prior, credentials);
+    },
+  );
+}
+interface InitCredentials {
+  secret: string;
+  tokenPath?: string;
+  interactive?: { path: string; token: string };
+}
+async function initCredentials(
+  args: Arguments,
+  deps: CliDependencies,
+  directory: string,
+  prior: Awaited<ReturnType<typeof loadConfig>> | undefined,
+): Promise<InitCredentials> {
+  if (prior) return { secret: await tokenValue(prior.token, directory, deps) };
+  const provided = flag(args, "token-file");
+  if (!provided && deps.isTTY) {
+    const interactive = await interactiveToken(directory, deps);
+    return {
+      secret: interactive.token,
+      tokenPath: interactive.path,
+      interactive,
+    };
+  }
+  const tokenPath = resolve(await requiredInput(provided, "token-file", deps));
+  return {
+    tokenPath,
+    secret: await tokenValue({ file: tokenPath }, directory, deps),
+  };
+}
+async function completeInit(
+  args: Arguments,
+  deps: CliDependencies,
+  directory: string,
+  prior: Awaited<ReturnType<typeof loadConfig>> | undefined,
+  credentials: InitCredentials,
+): Promise<void> {
+  const { tokenPath, secret, interactive } = credentials;
+  const existing = prior !== undefined;
+  const config =
+    prior ?? (await configForInit(args, deps, tokenPath ?? "", secret));
   await verifyCodex(directory, config, deps);
   await checkLinger(directory, deps);
   const version = await install(
@@ -357,8 +347,10 @@ export async function init(
       exec: deps.exec,
     },
     await packageVersion(deps.packageRoot),
-    flag(args, "to"),
+    await installedTarget(args, directory, existing),
   );
-  await writeInstalledState(directory, version, config, args, deps);
+  if (interactive) await persistToken(interactive.path, interactive.token);
+  await writeInstalledState(directory, version, config, args, deps, existing);
   deps.stdout(`Initialized ${directory} with thc ${version}.\n`);
+  reportCliPath(deps);
 }

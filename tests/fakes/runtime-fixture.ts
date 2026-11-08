@@ -42,7 +42,7 @@ export async function waitUntil(
     await new Promise((resolveWait) => setTimeout(resolveWait, 25));
   }
 }
-export async function fixture() {
+export async function fixture(botId = "123") {
   const root = await mkdtemp(join(tmpdir(), "thc-crash-"));
   await mkdir(join(root, ".thc"));
   const server = new FakeServices();
@@ -63,6 +63,7 @@ export async function fixture() {
           ...process.env,
           THC_TEST_ROOT: root,
           THC_TEST_SERVER: server.url,
+          THC_TEST_BOT_ID: botId,
           THC_TEST_HOLD_INBOX: holdInbox ? "1" : "0",
           ...(now ? { THC_TEST_NOW: now } : {}),
           ...(status ? { THC_TEST_STATUS: status } : {}),

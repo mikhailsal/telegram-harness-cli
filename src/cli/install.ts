@@ -6,6 +6,7 @@ import { SCHEMA_VERSION } from "../store/index.js";
 import { CliError } from "./errors.js";
 import { exists } from "./paths.js";
 import { defaults, type CliDependencies } from "./context.js";
+import { withSetupLock } from "./setup-lock.js";
 
 export interface InstallPaths {
   home: string;
@@ -72,7 +73,8 @@ async function snapshot(directory: string): Promise<void> {
   }
 }
 function shim(): string {
-  return `#!/usr/bin/env node\n// thc-managed-shim v1\nimport { existsSync, readFileSync, readdirSync } from 'node:fs';\nimport { dirname, join, resolve } from 'node:path';\nimport { homedir } from 'node:os';\nimport { spawnSync } from 'node:child_process';\nconst args=process.argv.slice(2); const i=args.indexOf('--dir'); const inline=args.find(x=>x.startsWith('--dir='));
+  const node = `'${process.execPath.replaceAll("'", "'\\''")}'`;
+  return `#!/bin/sh\n':' //; exec ${node} "$0" "$@"\n// thc-managed-shim v1\nimport { existsSync, readFileSync, readdirSync } from 'node:fs';\nimport { dirname, join, resolve } from 'node:path';\nimport { homedir } from 'node:os';\nimport { spawnSync } from 'node:child_process';\nconst args=process.argv.slice(2); const i=args.indexOf('--dir'); const inline=args.find(x=>x.startsWith('--dir='));
 const override=i>=0 ? args[i+1] : inline?.slice(6);
 let p=resolve(override || process.env.THC_DIR || process.cwd());\nif (p.endsWith('/.thc')) p=dirname(p);\nlet v; for (;;) { const f=join(p,'.thc','version'); if (existsSync(f)) { v=readFileSync(f,'utf8').trim(); break; } const n=dirname(p); if (n===p) break; p=n; }\nconst root=join(homedir(),'.local','share','thc');\nif (!v) v=readdirSync(root).filter(x=>/^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$/.test(x)).sort((a,b)=>{const [aa,ap]=a.split('-',2),[bb,bp]=b.split('-',2);const n=aa.localeCompare(bb,undefined,{numeric:true});return n || (ap===undefined ? 1 : bp===undefined ? -1 : ap.localeCompare(bp,undefined,{numeric:true}));}).at(-1);\nif (!v || !/^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$/.test(v)) { console.error('thc: E_DEPENDENCY: No valid installed version\\nfix: thc init --update'); process.exit(4); }\nconst r=spawnSync(process.execPath,[join(root,v,'dist','cli','main.js'),...process.argv.slice(2)],{stdio:'inherit',env:process.env}); if(r.error) { console.error('thc: E_DEPENDENCY: '+r.error.message+'\\nfix: thc init --update'); process.exit(4); } process.exit(r.status ?? 4);\n`;
 }
@@ -190,9 +192,12 @@ export async function install(
         4,
       );
     await verifyPackage(join(root, version));
-  } else await installCurrent(paths, version);
+  } else
+    await withSetupLock(paths.home, "installation", () =>
+      installCurrent(paths, version),
+    );
   await snapshot(paths.directory);
-  await writeShim(paths.home);
+  await withSetupLock(paths.home, "installation", () => writeShim(paths.home));
   await mkdir(join(paths.directory, ".thc"), { recursive: true, mode: 0o700 });
   const temp = join(paths.directory, ".thc", `.version-${randomUUID()}`);
   await writeFile(temp, `${version}\n`, { mode: 0o600, flag: "wx" });
@@ -200,6 +205,15 @@ export async function install(
   return version;
 }
 export async function registerFolder(
+  home: string,
+  directory: string,
+  version: string,
+): Promise<void> {
+  await withSetupLock(home, "folders", () =>
+    updateFolders(home, directory, version),
+  );
+}
+async function updateFolders(
   home: string,
   directory: string,
   version: string,

@@ -53,7 +53,9 @@ it("leaves the selected version untouched when locked dependency installation fa
     "1.0.0\n",
   );
   const { readdirSync } = await import("node:fs");
-  expect(readdirSync(join(home, ".local", "share", "thc"))).toEqual([]);
+  expect(readdirSync(join(home, ".local", "share", "thc"))).toEqual([
+    "setup-locks",
+  ]);
 });
 it("refuses cross-schema rollback before altering the folder version", async () => {
   const current = new DatabaseSync(join(directory, ".thc", "store.db"));
@@ -179,4 +181,11 @@ it("routes the shim by explicit folder and prefers a stable latest version outsi
       encoding: "utf8",
     }).trim(),
   ).toBe("stable-version");
+  expect(
+    execFileSync(shim, ["status", "--dir", directory], {
+      cwd: root,
+      env: { ...env, PATH: "" },
+      encoding: "utf8",
+    }).trim(),
+  ).toBe("folder-version");
 });

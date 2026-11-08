@@ -2,15 +2,35 @@
 
 ## First start
 
-Follow the [README quickstart](../README.md#getting-started) to build from source
-and create a private token file. Run initialization in the folder where the
-agent should work, using the absolute path to the built CLI. Plain `init`
-prompts for the token file, Telegram user ID and sandbox in a terminal;
-`init --token-file /secure/bot-token` skips only the first prompt.
+Run the single command in the [README quickstart](../README.md#getting-started)
+from the intended project. It downloads the installer completely before running
+it, resolves a fixed source commit, and builds with the locked dependencies.
+A completed source build is reused on subsequent runs of that commit. The
+bootstrap requires network access even when a build is cached.
 
-During the user-ID prompt, send a private message to the bot and enter the
-numeric ID it returns. Use a dedicated bot for this bridge: another process
-polling the same bot can consume its updates or cause a polling conflict.
+Compatible Node/npm and an existing Codex executable are reused. Missing
+Node 24.22.0 and Codex 0.166.0 are installed in persistent per-user toolchain
+directories; existing Codex installations are not upgraded. Interactive setup
+starts native Codex login if authentication is needed.
+
+Plain `init` prompts for a bot token without echoing it, verifies its identity
+with Telegram, and stores it outside the workspace with mode 0600. The bot's
+numeric ID is discovered automatically. `init --token-file /secure/bot-token`
+uses an existing credential instead. During the user-ID prompt, send a private
+message to the bot and enter the numeric ID it returns. This terminal entry
+explicitly authorizes the user; the first unknown sender is not automatically
+trusted.
+
+Each project needs a different bot. Initialization checks persistent bot
+bindings and registered projects for this Linux user before polling for an ID.
+Another process or another machine can still use the same token; do not share
+it between pollers. The product has no fixed total project/bot count; practical
+concurrent capacity has not been load-tested.
+
+Rerunning plain `init` keeps the existing configuration and selected version.
+An active service or foreground bridge is left running; a stopped installation
+is resumed. Use `--update` or `--to VERSION` explicitly to change versions.
+Concurrent setup processes serialize shared installation and registration work.
 
 Sandbox choices are `read-only`, `workspace-write` and `danger-full-access`.
 The choice is required. The default Codex protocol adapter starts its daemon
@@ -58,14 +78,14 @@ thc start
 
 `thc start` runs in the foreground and keeps that terminal occupied. Use a
 second terminal for inspection, and Ctrl+C to end the foreground process.
-To enable the prepared background service instead, run `thc init --update`
+To enable the prepared background service instead, run `thc init`
 from the configured project in a working systemd user session.
 
 ### Choosing tmux
 
 For tmux, initialize with `--no-start`, install tmux, then edit the existing
 `.thc/config.json` and change `codex.adapter` from `"protocol"` to `"tmux"`.
-Run `thc start` in the foreground, or `thc init --update` to start the user
+Run `thc start` in the foreground, or `thc init` to start the user
 service. There is no `--adapter` initialization flag. The measured baseline
 for both adapters is documented in the [README](../README.md).
 
@@ -132,3 +152,18 @@ it requires npm during initialization and does not install packages on startup.
 
 Errors follow the contract in [errors](errors.md). Each command's `--help`
 shows two examples.
+
+## Development from source
+
+The package is not published to npm. For development rather than product setup:
+
+```sh
+git clone https://github.com/mikhailsal/telegram-harness-cli.git
+cd telegram-harness-cli
+npm ci
+npm run build
+```
+
+Use Node.js 24.22.0 or newer with npm. Invoke the built CLI with its absolute
+path from a separate workspace. The README installer is the product setup path;
+it does not clone source into the agent's project or alter shell startup files.
