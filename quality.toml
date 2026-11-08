@@ -203,3 +203,7 @@ pattern = "tests/fixtures/**/*.txt"
 category = "assets"
 reason = "Sanitized captured input and output fixtures, not documentation."
 
+[[classification]]
+pattern = ".gstack-redact-allowlist"
+category = "assets"
+reason = "Exact synthetic URL fixture spans for the publication credential guard."
