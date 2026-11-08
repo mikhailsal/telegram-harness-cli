@@ -1,0 +1,222 @@
+{
+  "$defs": {
+    "Capability": {
+      "description": "Behavioral capabilities a component can declare (decision 0014).",
+      "enum": [
+        "library",
+        "cli",
+        "http-api",
+        "database",
+        "migrations",
+        "contracts",
+        "queues",
+        "ui",
+        "authorization"
+      ],
+      "title": "Capability",
+      "type": "string"
+    },
+    "Enhancement": {
+      "description": "Optional enhanced test profiles a component can enable (decision 0014).",
+      "enum": [
+        "property",
+        "performance",
+        "mutation"
+      ],
+      "title": "Enhancement",
+      "type": "string"
+    },
+    "NotApplicable": {
+      "additionalProperties": false,
+      "description": "A requirement of a declared capability that does not apply, and why.",
+      "properties": {
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "requirement": {
+          "title": "Requirement",
+          "type": "string"
+        }
+      },
+      "required": [
+        "requirement",
+        "reason"
+      ],
+      "title": "NotApplicable",
+      "type": "object"
+    },
+    "Retired": {
+      "additionalProperties": false,
+      "description": "A scenario ID that was deliberately removed, and why.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "reason"
+      ],
+      "title": "Retired",
+      "type": "object"
+    },
+    "Scenario": {
+      "additionalProperties": false,
+      "description": "One required behavior and the native test cases that prove it.\n\n`tests` are case names as the suite's results report them, or prefixes\nending in `*` that must select at least one case. `boundary` names what the\ntests exercise, such as a browser route that simulates the backend; every\nscenario of a browser component names it (decision 0018).",
+      "properties": {
+        "boundary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Boundary"
+        },
+        "capability": {
+          "$ref": "#/$defs/Capability"
+        },
+        "enhanced": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Enhancement"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "level": {
+          "$ref": "#/$defs/Suite"
+        },
+        "operations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Operations",
+          "type": "array"
+        },
+        "requirements": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Requirements",
+          "type": "array"
+        },
+        "stage": {
+          "$ref": "#/$defs/Stage"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "tests": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Tests",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "summary",
+        "capability",
+        "level",
+        "stage",
+        "tests"
+      ],
+      "title": "Scenario",
+      "type": "object"
+    },
+    "Stage": {
+      "description": "When a scenario is mandatory: before every commit, or before a merge.",
+      "enum": [
+        "commit",
+        "merge"
+      ],
+      "title": "Stage",
+      "type": "string"
+    },
+    "Suite": {
+      "description": "A declared test suite; only unit suites feed the coverage thresholds.",
+      "enum": [
+        "unit",
+        "integration",
+        "contract",
+        "e2e",
+        "acceptance"
+      ],
+      "title": "Suite",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The scenario manifest of one component.",
+  "properties": {
+    "component": {
+      "title": "Component",
+      "type": "string"
+    },
+    "not_applicable": {
+      "items": {
+        "$ref": "#/$defs/NotApplicable"
+      },
+      "title": "Not Applicable",
+      "type": "array"
+    },
+    "openapi": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Openapi"
+    },
+    "retired": {
+      "items": {
+        "$ref": "#/$defs/Retired"
+      },
+      "title": "Retired",
+      "type": "array"
+    },
+    "scenarios": {
+      "items": {
+        "$ref": "#/$defs/Scenario"
+      },
+      "title": "Scenarios",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "component"
+  ],
+  "title": "scenario manifest",
+  "type": "object"
+}

@@ -1,0 +1,15 @@
+# Code owners (decision 0015). Their review is required only where a ruleset or
+# branch protection enables "Require review from Code Owners"; see
+# docs/guides/protection.md. A derived repository replaces the owner below.
+
+# Every file has an owner.
+* @mikhailsal
+
+# Control files decide what the gate checks. They stay last, because the last
+# matching line wins: a broader rule added above cannot remove their owner.
+/quality @mikhailsal
+/quality.toml @mikhailsal
+/.gitattributes @mikhailsal
+/.github/ @mikhailsal
+/ci/ @mikhailsal
+/tools/quality/ @mikhailsal

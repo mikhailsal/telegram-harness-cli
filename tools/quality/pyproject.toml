@@ -1,0 +1,86 @@
+[project]
+name = "quality"
+version = "0.1.0"
+description = "Quality gate core for the universal quality boilerplate"
+requires-python = ">=3.14,<3.15"
+dependencies = [
+    "defusedxml==0.7.1",
+    "markdown-it-py==4.2.0",
+    "pydantic==2.14.1",
+    "pymarkdownlnt==0.9.41",
+    "pyright[nodejs]==1.1.414",
+    "pyyaml==6.0.3",
+    "ruff==0.17.1",
+]
+
+[dependency-groups]
+dev = [
+    "coverage==7.16.2",
+    "pytest==9.1.1",
+    "pytest-cov==7.1.0",
+    "pytest-xdist==3.8.0",
+    "types-defusedxml==0.7.0.20260504",
+    "types-pyyaml==6.0.12.20260906",
+]
+
+[tool.uv]
+required-version = "==0.12.24"
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# Explicit selection; structural thresholds are enforced by the gate itself,
+# so Ruff's own size and complexity rules (C90, PLR09xx) are not selected.
+select = [
+    "A", "B", "BLE", "C4", "D", "DTZ", "E", "EM", "F", "FBT", "FURB", "I", "ISC",
+    "N", "PERF", "PGH", "PIE", "PLE", "PLW", "PTH", "RET", "RUF", "S", "SIM",
+    "SLF", "TID", "TRY", "UP", "W",
+]
+ignore = [
+    "D105",  # magic methods document themselves
+    "D107",  # __init__ is documented on the class
+    "D203",  # conflicts with D211
+    "D213",  # conflicts with D212
+    "S603",  # subprocess with argument arrays is the intended design
+    "S607",  # executables are resolved against an explicit PATH
+    "TRY003",  # messages are built in a variable first (EM rules)
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Category policy for test code: assertions are the test mechanism, test
+# functions are documented by their names, and tests may use private helpers.
+"tests/**" = ["S101", "D100", "D101", "D102", "D103", "D104", "SLF001", "FBT"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.14"
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "strict"
+reportMissingTypeStubs = "error"
+reportUnnecessaryTypeIgnoreComment = "error"
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit"]
+pythonpath = ["src"]
+# One pytest-xdist worker per CPU. No `xdist_group` marks: grouping renames the
+# tests in the JUnit report, and the scenario manifests name them.
+addopts = [
+    "-p", "no:cacheprovider", "--strict-markers", "--strict-config", "--import-mode=importlib",
+    "-n", "auto",
+]
+xfail_strict = true
+
+[tool.coverage.run]
+branch = true
+source = ["src"]
+
+[tool.coverage.report]
+show_missing = true

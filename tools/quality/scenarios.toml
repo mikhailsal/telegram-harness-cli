@@ -1,0 +1,38 @@
+# Behavioral scenarios of the quality core (decision 0014). Each one names the
+# test cases whose fresh, passing results prove it.
+schema_version = 1
+component = "quality-core"
+
+[[scenarios]]
+id = "artifact-smoke"
+summary = "A project exported from the template starts the pinned core through ./quality and answers."
+capability = "cli"
+level = "e2e"
+stage = "commit"
+requirements = ["cli.smoke"]
+tests = ["tests.e2e.test_artifact::test_the_exported_template_starts_and_answers"]
+
+[[scenarios]]
+id = "template-commands"
+summary = "The exported template validates its policy and scenarios and reports usage errors."
+capability = "cli"
+level = "e2e"
+stage = "commit"
+requirements = ["cli.flows"]
+tests = [
+    "tests.e2e.test_artifact::test_the_exported_template_validates_its_policy",
+    "tests.e2e.test_artifact::test_the_exported_template_lists_its_scenarios",
+    "tests.e2e.test_artifact::test_a_usage_error_exits_with_status_2",
+]
+
+[[scenarios]]
+id = "template-export"
+summary = "A fresh clone exports a project without maintainer content, as a repository naming its template."
+capability = "cli"
+level = "e2e"
+stage = "commit"
+requirements = ["cli.flows"]
+tests = [
+    "tests.e2e.test_artifact::test_the_export_leaves_out_the_maintainer_content",
+    "tests.e2e.test_artifact::test_the_export_is_a_repository_that_names_its_template",
+]

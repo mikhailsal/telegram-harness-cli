@@ -1,0 +1,48 @@
+schema_version = 1
+component = "example-web"
+
+[[scenarios]]
+id = "home"
+summary = "The production build starts on the home page, which passes its accessibility scan."
+capability = "ui"
+level = "e2e"
+stage = "merge"
+requirements = ["ui.smoke", "ui.accessibility"]
+tests = ["e2e/navigation.spec.ts::the home page leads to the feedback form and back"]
+boundary = "the static production build, without a backend"
+
+[[scenarios]]
+id = "navigation"
+summary = "Links, deep links, the back button, and unknown addresses show the right page."
+capability = "ui"
+level = "e2e"
+stage = "merge"
+requirements = ["ui.flows"]
+tests = [
+    "e2e/navigation.spec.ts::the home page leads to the feedback form and back",
+    "e2e/navigation.spec.ts::a deep link opens its page, and an unknown address leads home",
+]
+boundary = "the static production build, without a backend"
+
+[[scenarios]]
+id = "send-feedback"
+summary = "Valid feedback shows its progress and thanks the sender; a refused request keeps the form."
+capability = "ui"
+level = "e2e"
+stage = "merge"
+requirements = ["ui.flows", "ui.accessibility"]
+tests = [
+    "e2e/feedback.spec.ts::sent feedback shows its progress and then thanks the sender",
+    "e2e/feedback.spec.ts::a refused request keeps the form and asks to try again",
+]
+boundary = "the production build, with the feedback API simulated by a Playwright route"
+
+[[scenarios]]
+id = "keyboard-corrections"
+summary = "From the keyboard alone, each problem of the form takes the focus and is corrected."
+capability = "ui"
+level = "e2e"
+stage = "merge"
+requirements = ["ui.keyboard", "ui.accessibility"]
+tests = ["e2e/feedback.spec.ts::an incomplete form is corrected and sent from the keyboard"]
+boundary = "the production build, with the feedback API simulated by a Playwright route"

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- Written by Vitest 3.2.4 with the junit reporter; host, timestamps, and durations normalized. -->
+<testsuites name="vitest tests" tests="6" failures="2" errors="0" time="0.001">
+    <testsuite name="math.test.js" timestamp="2026-01-01T00:00:00Z" hostname="host" tests="4" failures="2" errors="0" skipped="1" time="0.001">
+        <testcase classname="math.test.js" name="math &gt; adds" time="0.001">
+        </testcase>
+        <testcase classname="math.test.js" name="math &gt; fails" time="0.001">
+            <failure message="expected 2 to be 3 // Object.is equality" type="AssertionError">
+AssertionError: expected 2 to be 3 // Object.is equality
+
+- Expected
++ Received
+
+- 3
++ 2
+
+ ❯ math.test.js:8:19
+            </failure>
+        </testcase>
+        <testcase classname="math.test.js" name="math &gt; is skipped" time="0.001">
+            <skipped/>
+        </testcase>
+        <testcase classname="math.test.js" name="math &gt; throws" time="0.001">
+            <failure message="boom" type="TypeError">
+TypeError: boom
+ ❯ math.test.js:14:11
+            </failure>
+        </testcase>
+    </testsuite>
+    <testsuite name="other.test.js" timestamp="2026-01-01T00:00:00Z" hostname="host" tests="2" failures="0" errors="0" skipped="1" time="0.001">
+        <testcase classname="other.test.js" name="top level" time="0.001">
+        </testcase>
+        <testcase classname="other.test.js" name="later" time="0.001">
+            <skipped/>
+        </testcase>
+    </testsuite>
+</testsuites>

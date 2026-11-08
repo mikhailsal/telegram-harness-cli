@@ -1,0 +1,209 @@
+# Pinned standalone tools; see docs/decisions/0001-toolchain-pins.md.
+# Checksums come from the vendors' published checksum files, which each tool's
+# `checksums` names; `quality tools update` reads them for a new release.
+schema_version = 1
+
+[tools.uv]
+version = "0.12.24"
+binary = "uv"
+checksums = "{url}.sha256"
+
+[tools.uv.artifacts.x86_64]
+url = "https://github.com/astral-sh/uv/releases/download/0.12.24/uv-x86_64-unknown-linux-gnu.tar.gz"
+sha256 = "b4dfaef47d491a7296981f8374a4595f55dbf84e8937c8ecd2983574d8bb3da6"
+packaging = "tar"
+member = "uv-x86_64-unknown-linux-gnu/uv"
+
+[tools.uv.artifacts.aarch64]
+url = "https://github.com/astral-sh/uv/releases/download/0.12.24/uv-aarch64-unknown-linux-gnu.tar.gz"
+sha256 = "5231be65f496304623895dacdbf1de8504fec90303684bdf05805aa34414dd21"
+packaging = "tar"
+member = "uv-aarch64-unknown-linux-gnu/uv"
+
+[tools.gitleaks]
+version = "8.30.1"
+binary = "gitleaks"
+checksums = "https://github.com/gitleaks/gitleaks/releases/download/v{version}/gitleaks_{version}_checksums.txt"
+
+# The rule set embedded in this release, fetched at its tag and pinned by checksum
+# so the secret adapter can derive its configuration outside the scanned tree
+# (decision 0007).
+[tools.gitleaks.extras."gitleaks.toml"]
+url = "https://raw.githubusercontent.com/gitleaks/gitleaks/v8.30.1/config/gitleaks.toml"
+sha256 = "e163e53b9e7e8a8511e77271e2b323ed057759542a6d988258afe3a1fa329caf"
+
+[tools.gitleaks.artifacts.x86_64]
+url = "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz"
+sha256 = "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+packaging = "tar"
+member = "gitleaks"
+
+[tools.gitleaks.artifacts.aarch64]
+url = "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_arm64.tar.gz"
+sha256 = "e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080"
+packaging = "tar"
+member = "gitleaks"
+
+[tools.osv-scanner]
+version = "2.7.0"
+binary = "osv-scanner"
+checksums = "https://github.com/google/osv-scanner/releases/download/v{version}/osv-scanner_SHA256SUMS"
+
+[tools.osv-scanner.artifacts.x86_64]
+url = "https://github.com/google/osv-scanner/releases/download/v2.7.0/osv-scanner_linux_amd64"
+sha256 = "160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b"
+packaging = "binary"
+
+[tools.osv-scanner.artifacts.aarch64]
+url = "https://github.com/google/osv-scanner/releases/download/v2.7.0/osv-scanner_linux_arm64"
+sha256 = "4061ef4c021ed3c47f203b818f337e351336cc5cd67c0274fc36bd1dfc728dd7"
+packaging = "binary"
+
+[tools.actionlint]
+version = "1.7.12"
+binary = "actionlint"
+checksums = "https://github.com/rhysd/actionlint/releases/download/v{version}/actionlint_{version}_checksums.txt"
+
+[tools.actionlint.artifacts.x86_64]
+url = "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz"
+sha256 = "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+packaging = "tar"
+member = "actionlint"
+
+[tools.actionlint.artifacts.aarch64]
+url = "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_arm64.tar.gz"
+sha256 = "325e971b6ba9bfa504672e29be93c24981eeb1c07576d730e9f7c8805afff0c6"
+packaging = "tar"
+member = "actionlint"
+
+# Node.js runs the TypeScript profile's tools; it is installed with its whole
+# tree because npm and the libraries live beside the executable. Only
+# components with the TypeScript profile need it (decision 0011).
+[tools.node]
+version = "24.22.0"
+binary = "node"
+executable = "bin/node"
+checksums = "https://nodejs.org/dist/v{version}/SHASUMS256.txt"
+
+[tools.node.artifacts.x86_64]
+url = "https://nodejs.org/dist/v24.22.0/node-v24.22.0-linux-x64.tar.xz"
+sha256 = "cc2f601cee82d9a5a233302fe307abc600727035fd7d2c3a3571755989e95008"
+packaging = "tree"
+member = "node-v24.22.0-linux-x64"
+
+[tools.node.artifacts.aarch64]
+url = "https://nodejs.org/dist/v24.22.0/node-v24.22.0-linux-arm64.tar.xz"
+sha256 = "fef00bb4d36e1c50104a9775a10359beee98f162b4104dd12472c75065c6a143"
+packaging = "tree"
+member = "node-v24.22.0-linux-arm64"
+
+# The Chrome for Testing headless shell that browser scenarios run in, installed
+# with its whole tree like Node.js. Google publishes no SHA-256 for it: these
+# were computed from downloads that matched the MD5 digests of the bucket, and
+# without a vendor checksum file `quality tools update` refuses the tool. Only
+# an active browser component needs it (decision 0017).
+[tools.chromium]
+version = "156.0.8078.4"
+binary = "chrome-headless-shell"
+
+[tools.chromium.artifacts.x86_64]
+url = "https://storage.googleapis.com/chrome-for-testing-public/156.0.8078.4/linux64/chrome-headless-shell-linux64.zip"
+sha256 = "c3e50596aef52c58f8fda3c6b3411c33d34c88b177b3ed1c2243359fd3b8ba20"
+packaging = "tree"
+member = "chrome-headless-shell-linux64"
+
+[tools.chromium.artifacts.aarch64]
+url = "https://storage.googleapis.com/chrome-for-testing-public/156.0.8078.4/linux-arm64/chrome-headless-shell-linux-arm64.zip"
+sha256 = "81ab9d4d3c301dc5fdfb6c541b9e6632b16fc819a6a854460f40a76fe2b2c476"
+packaging = "tree"
+member = "chrome-headless-shell-linux-arm64"
+
+[tools.dart]
+version = "3.13.6"
+binary = "dart"
+executable = "bin/dart"
+checksums = "{url}.sha256sum"
+
+[tools.dart.artifacts.x86_64]
+url = "https://storage.googleapis.com/dart-archive/channels/stable/release/3.13.6/sdk/dartsdk-linux-x64-release.zip"
+sha256 = "f80780c01ade17b789cf4dc2425d662f63bdd40eceda53b36c0d46af650de41b"
+packaging = "tree"
+member = "dart-sdk"
+
+[tools.dart.artifacts.aarch64]
+url = "https://storage.googleapis.com/dart-archive/channels/stable/release/3.13.6/sdk/dartsdk-linux-arm64-release.zip"
+sha256 = "73753a2e009505a2ba0d0c0bd449e248001a01984c805a3fcc19671dbb9616b1"
+packaging = "tree"
+member = "dart-sdk"
+
+# Composer installs a PHP component's locked packages. It is a PHP archive that
+# the system PHP runs, the same file on every architecture (decision 0013).
+[tools.composer]
+version = "2.10.3"
+binary = "composer"
+checksums = "{url}.sha256sum"
+
+[tools.composer.artifacts.x86_64]
+url = "https://getcomposer.org/download/2.10.3/composer.phar"
+sha256 = "7a2d379d5b8ffdaa028580ef26494c36d2feef4b178d3dd1473a4dbc5e17c8d6"
+packaging = "binary"
+
+[tools.composer.artifacts.aarch64]
+url = "https://getcomposer.org/download/2.10.3/composer.phar"
+sha256 = "7a2d379d5b8ffdaa028580ef26494c36d2feef4b178d3dd1473a4dbc5e17c8d6"
+packaging = "binary"
+
+# Exact versions a TypeScript component must lock in its package-lock.json;
+# npm installs them from that lockfile (decision 0011).
+[packages.npm]
+"typescript" = "6.0.3"
+"eslint" = "10.13.0"
+"@eslint/js" = "10.0.1"
+"typescript-eslint" = "8.72.0"
+"prettier" = "3.9.10"
+"vitest" = "5.0.5"
+"@vitest/coverage-v8" = "5.0.5"
+
+# Exact versions a browser component (`target = "browser"`) also locks in its
+# package-lock.json; a Node component needs none of them (decision 0017).
+[packages.npm-browser]
+"react" = "19.3.1"
+"react-dom" = "19.3.1"
+"@types/react" = "19.3.0"
+"@types/react-dom" = "19.3.0"
+"vite" = "8.3.5"
+"@vitejs/plugin-react" = "6.1.2"
+"jsdom" = "30.1.3"
+"@testing-library/react" = "16.3.3"
+"@testing-library/dom" = "10.4.2"
+"@testing-library/user-event" = "14.6.8"
+"eslint-plugin-react-hooks" = "7.1.1"
+"eslint-plugin-jsx-a11y-x" = "0.2.0"
+"globals" = "17.13.0"
+"stylelint" = "17.16.0"
+"stylelint-config-standard" = "40.0.0"
+"stylelint-config-css-modules" = "4.6.0"
+"@playwright/test" = "1.64.1"
+"@axe-core/playwright" = "4.14.0"
+
+# Exact versions a Dart component must lock in its pubspec.lock (decision 0012).
+[packages.pub]
+"test" = "1.33.0"
+"coverage" = "1.16.0"
+"lints" = "6.1.0"
+
+# Exact versions a PHP component must lock in its composer.lock (decision 0013);
+# php-code-coverage writes the coverage reports that the gate parses.
+[packages.composer]
+"phpunit/phpunit" = "13.4.3"
+"phpunit/php-code-coverage" = "14.4.1"
+"phpstan/phpstan" = "2.3.1"
+"friendsofphp/php-cs-fixer" = "3.95.27"
+
+# System programs the PHP profile runs but does not install: PHP itself and the
+# Xdebug extension that measures branches, at these minor versions (decision 0013).
+[runtimes.php]
+version = "8.4"
+
+[runtimes.xdebug]
+version = "3.5"

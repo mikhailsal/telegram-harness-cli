@@ -1,0 +1,25 @@
+# Behavioral scenarios of the launcher behind the root `quality` symlink
+# (decisions 0010 and 0014).
+schema_version = 1
+component = "quality-launcher"
+
+[[scenarios]]
+id = "first-run"
+summary = "In a fresh copy of the template, ./quality prepares the core offline and answers."
+capability = "cli"
+level = "e2e"
+stage = "commit"
+requirements = ["cli.smoke"]
+tests = ["e2e.test_artifact::test_a_fresh_copy_prepares_the_core_and_answers"]
+
+[[scenarios]]
+id = "pass-through"
+summary = "Arguments and exit statuses pass through to the core; only bootstrap may download."
+capability = "cli"
+level = "e2e"
+stage = "commit"
+requirements = ["cli.flows"]
+tests = [
+    "e2e.test_artifact::test_arguments_and_exit_statuses_pass_through_to_the_core",
+    "e2e.test_artifact::test_without_the_pinned_uv_other_commands_never_download",
+]

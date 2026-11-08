@@ -1,0 +1,885 @@
+{
+  "$defs": {
+    "Architecture": {
+      "additionalProperties": false,
+      "description": "Declared modules, layers, and forbidden dependency edges; cycles always fail.\n\n`layers` lists module names from the top down: a module may depend on modules\nlisted after it, never on modules listed before it.",
+      "properties": {
+        "forbidden": {
+          "items": {
+            "$ref": "#/$defs/Edge"
+          },
+          "title": "Forbidden",
+          "type": "array"
+        },
+        "layers": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Layers",
+          "type": "array"
+        },
+        "modules": {
+          "items": {
+            "$ref": "#/$defs/ModuleDecl"
+          },
+          "title": "Modules",
+          "type": "array"
+        }
+      },
+      "title": "Architecture",
+      "type": "object"
+    },
+    "AuditPolicy": {
+      "additionalProperties": false,
+      "description": "Which advisories block: a CVSS score at or above `blocking_score`.\n\nLower scores are warnings. An advisory without a score is an error unless\n`unscored` is \"warning\".",
+      "properties": {
+        "blocking_score": {
+          "default": 7.0,
+          "maximum": 10,
+          "minimum": 0,
+          "title": "Blocking Score",
+          "type": "number"
+        },
+        "unscored": {
+          "default": "error",
+          "enum": [
+            "error",
+            "warning"
+          ],
+          "title": "Unscored",
+          "type": "string"
+        }
+      },
+      "title": "AuditPolicy",
+      "type": "object"
+    },
+    "BrowserSettings": {
+      "additionalProperties": false,
+      "description": "HTML entry points, public build values, server-only modules, viewports, and scans.\n\n`entries` are relative to the component root. `public_env` holds the only\nvalues the production build exposes to the client; they are not secret.\nBrowser source may import neither `server_modules` (globs relative to the\nroot) nor `server_packages`. Every browser scenario runs in each viewport,\nand every accessibility scan runs at least the axe `accessibility_tags`.",
+      "properties": {
+        "accessibility_tags": {
+          "items": {
+            "maxLength": 64,
+            "pattern": "^[a-z0-9][a-z0-9.-]*$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Accessibility Tags",
+          "type": "array"
+        },
+        "entries": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Entries",
+          "type": "array"
+        },
+        "public_env": {
+          "additionalProperties": {
+            "maxLength": 1024,
+            "pattern": "^[^\\r\\n\\x00]*$",
+            "type": "string"
+          },
+          "title": "Public Env",
+          "type": "object"
+        },
+        "server_modules": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Server Modules",
+          "type": "array"
+        },
+        "server_packages": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Server Packages",
+          "type": "array"
+        },
+        "viewports": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Viewport"
+          },
+          "minProperties": 1,
+          "title": "Viewports",
+          "type": "object"
+        }
+      },
+      "title": "BrowserSettings",
+      "type": "object"
+    },
+    "Bundler": {
+      "description": "The bundlers that build a browser component (decision 0017).",
+      "enum": [
+        "vite"
+      ],
+      "title": "Bundler",
+      "type": "string"
+    },
+    "Capability": {
+      "description": "Behavioral capabilities a component can declare (decision 0014).",
+      "enum": [
+        "library",
+        "cli",
+        "http-api",
+        "database",
+        "migrations",
+        "contracts",
+        "queues",
+        "ui",
+        "authorization"
+      ],
+      "title": "Capability",
+      "type": "string"
+    },
+    "Category": {
+      "description": "File categories assigned to every candidate file.",
+      "enum": [
+        "source",
+        "tests",
+        "docs",
+        "config",
+        "generated",
+        "vendor",
+        "assets"
+      ],
+      "title": "Category",
+      "type": "string"
+    },
+    "CiPolicy": {
+      "additionalProperties": false,
+      "description": "The workflow whose aggregate job is the required status, and the owned control files.\n\n`required_jobs` are the jobs the aggregate job must find successful;\n`control` adds paths to those derived from the policy that need owner\nreview in `codeowners`.",
+      "properties": {
+        "aggregate_job": {
+          "default": "required",
+          "title": "Aggregate Job",
+          "type": "string"
+        },
+        "codeowners": {
+          "default": ".github/CODEOWNERS",
+          "title": "Codeowners",
+          "type": "string"
+        },
+        "control": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Control",
+          "type": "array"
+        },
+        "required_jobs": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Required Jobs",
+          "type": "array"
+        },
+        "workflow": {
+          "title": "Workflow",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workflow",
+        "required_jobs"
+      ],
+      "title": "CiPolicy",
+      "type": "object"
+    },
+    "Classification": {
+      "additionalProperties": false,
+      "description": "An explicit category for files matching a narrow glob.",
+      "properties": {
+        "category": {
+          "$ref": "#/$defs/Category"
+        },
+        "pattern": {
+          "title": "Pattern",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pattern",
+        "category",
+        "reason"
+      ],
+      "title": "Classification",
+      "type": "object"
+    },
+    "Component": {
+      "additionalProperties": false,
+      "description": "A unit with its own profile, roots, and gates.\n\nA TypeScript component runs on Node unless `target` is `\"browser\"`\n(decision 0017); `framework`, `bundler`, and `browser` belong to that target.",
+      "properties": {
+        "architecture": {
+          "$ref": "#/$defs/Architecture"
+        },
+        "browser": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BrowserSettings"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "bundler": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bundler"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "capabilities": {
+          "items": {
+            "$ref": "#/$defs/Capability"
+          },
+          "title": "Capabilities",
+          "type": "array"
+        },
+        "depends_on": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Depends On",
+          "type": "array"
+        },
+        "enhanced": {
+          "items": {
+            "$ref": "#/$defs/Enhancement"
+          },
+          "title": "Enhanced",
+          "type": "array"
+        },
+        "framework": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Framework"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "no_boundary_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "No Boundary Reason"
+        },
+        "profile": {
+          "$ref": "#/$defs/Profile"
+        },
+        "role": {
+          "$ref": "#/$defs/Role"
+        },
+        "root": {
+          "title": "Root",
+          "type": "string"
+        },
+        "scenarios": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scenarios"
+        },
+        "source": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Source",
+          "type": "array"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExecutionTarget"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tests": {
+          "$ref": "#/$defs/Suites"
+        }
+      },
+      "required": [
+        "id",
+        "role",
+        "profile",
+        "root",
+        "source",
+        "tests"
+      ],
+      "title": "Component",
+      "type": "object"
+    },
+    "CoveragePolicy": {
+      "additionalProperties": false,
+      "description": "Blocking unit coverage minima in percent (R06).",
+      "properties": {
+        "branch": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Branch",
+          "type": "integer"
+        },
+        "changed_lines": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Changed Lines",
+          "type": "integer"
+        },
+        "line": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Line",
+          "type": "integer"
+        },
+        "new_file_must_be_covered": {
+          "title": "New File Must Be Covered",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "line",
+        "branch",
+        "changed_lines",
+        "new_file_must_be_covered"
+      ],
+      "title": "CoveragePolicy",
+      "type": "object"
+    },
+    "Edge": {
+      "additionalProperties": false,
+      "description": "A forbidden dependency from one module to another.",
+      "properties": {
+        "from": {
+          "title": "From",
+          "type": "string"
+        },
+        "to": {
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "title": "Edge",
+      "type": "object"
+    },
+    "Enhancement": {
+      "description": "Optional enhanced test profiles a component can enable (decision 0014).",
+      "enum": [
+        "property",
+        "performance",
+        "mutation"
+      ],
+      "title": "Enhancement",
+      "type": "string"
+    },
+    "ExecutionTarget": {
+      "description": "Where a TypeScript component's code runs (decision 0017).",
+      "enum": [
+        "node",
+        "browser"
+      ],
+      "title": "ExecutionTarget",
+      "type": "string"
+    },
+    "Framework": {
+      "description": "The user-interface frameworks a browser component may use (decision 0017).",
+      "enum": [
+        "react"
+      ],
+      "title": "Framework",
+      "type": "string"
+    },
+    "Limit": {
+      "additionalProperties": false,
+      "description": "A warning and/or error threshold; values above the threshold trigger.",
+      "properties": {
+        "error": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "warning": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Warning"
+        }
+      },
+      "title": "Limit",
+      "type": "object"
+    },
+    "ModuleDecl": {
+      "additionalProperties": false,
+      "description": "A named module: file globs relative to the component root.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "paths": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Paths",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "paths"
+      ],
+      "title": "ModuleDecl",
+      "type": "object"
+    },
+    "PolicyException": {
+      "additionalProperties": false,
+      "description": "A scoped, owned, and reviewed exception to one rule.",
+      "properties": {
+        "expires": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires"
+        },
+        "owner": {
+          "title": "Owner",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "review": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Review"
+        },
+        "rule": {
+          "title": "Rule",
+          "type": "string"
+        },
+        "symbol": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Symbol"
+        }
+      },
+      "required": [
+        "rule",
+        "path",
+        "reason",
+        "owner"
+      ],
+      "title": "PolicyException",
+      "type": "object"
+    },
+    "Profile": {
+      "description": "Tier 1 language profiles.",
+      "enum": [
+        "python",
+        "typescript",
+        "dart",
+        "php"
+      ],
+      "title": "Profile",
+      "type": "string"
+    },
+    "Quarantine": {
+      "additionalProperties": false,
+      "description": "A flaky test whose failure does not fail its suite until the entry expires.\n\nA quarantined test never satisfies a scenario; the scenarios it lists are\nsuspended instead of failing while the entry lasts.",
+      "properties": {
+        "component": {
+          "title": "Component",
+          "type": "string"
+        },
+        "expires": {
+          "format": "date",
+          "title": "Expires",
+          "type": "string"
+        },
+        "owner": {
+          "title": "Owner",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "scenarios": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Scenarios",
+          "type": "array"
+        },
+        "suite": {
+          "$ref": "#/$defs/Suite"
+        },
+        "test": {
+          "title": "Test",
+          "type": "string"
+        }
+      },
+      "required": [
+        "component",
+        "suite",
+        "test",
+        "reason",
+        "owner",
+        "expires"
+      ],
+      "title": "Quarantine",
+      "type": "object"
+    },
+    "Repository": {
+      "additionalProperties": false,
+      "description": "Repository-wide settings.",
+      "properties": {
+        "default_branch": {
+          "default": "main",
+          "title": "Default Branch",
+          "type": "string"
+        },
+        "mode": {
+          "default": "project",
+          "enum": [
+            "project",
+            "maintainer"
+          ],
+          "title": "Mode",
+          "type": "string"
+        }
+      },
+      "title": "Repository",
+      "type": "object"
+    },
+    "Role": {
+      "description": "Component roles; see decision 0003.",
+      "enum": [
+        "application",
+        "tooling",
+        "helper",
+        "example"
+      ],
+      "title": "Role",
+      "type": "string"
+    },
+    "Suite": {
+      "description": "A declared test suite; only unit suites feed the coverage thresholds.",
+      "enum": [
+        "unit",
+        "integration",
+        "contract",
+        "e2e",
+        "acceptance"
+      ],
+      "title": "Suite",
+      "type": "string"
+    },
+    "Suites": {
+      "additionalProperties": false,
+      "description": "Test roots per suite, relative to the component root.",
+      "properties": {
+        "acceptance": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Acceptance",
+          "type": "array"
+        },
+        "contract": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Contract",
+          "type": "array"
+        },
+        "e2e": {
+          "items": {
+            "type": "string"
+          },
+          "title": "E2E",
+          "type": "array"
+        },
+        "integration": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Integration",
+          "type": "array"
+        },
+        "unit": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unit",
+          "type": "array"
+        }
+      },
+      "title": "Suites",
+      "type": "object"
+    },
+    "TemplatePolicy": {
+      "additionalProperties": false,
+      "description": "Maintainer content that a project made from this repository does not receive.\n\n`exclude` lists the paths the export leaves out. Each file in `fenced`\nloses its maintainer-only regions, the lines between a line containing\n`maintainer-only:begin` and one containing `maintainer-only:end`.",
+      "properties": {
+        "exclude": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Exclude",
+          "type": "array"
+        },
+        "fenced": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Fenced",
+          "type": "array"
+        }
+      },
+      "title": "TemplatePolicy",
+      "type": "object"
+    },
+    "Thresholds": {
+      "additionalProperties": false,
+      "description": "Structural and repository thresholds (R04).",
+      "properties": {
+        "agents_lines": {
+          "exclusiveMinimum": 0,
+          "title": "Agents Lines",
+          "type": "integer"
+        },
+        "agents_words": {
+          "exclusiveMinimum": 0,
+          "title": "Agents Words",
+          "type": "integer"
+        },
+        "blob_bytes": {
+          "exclusiveMinimum": 0,
+          "title": "Blob Bytes",
+          "type": "integer"
+        },
+        "cyclomatic_complexity": {
+          "$ref": "#/$defs/Limit"
+        },
+        "doc_page_lines": {
+          "exclusiveMinimum": 0,
+          "title": "Doc Page Lines",
+          "type": "integer"
+        },
+        "doc_page_words": {
+          "exclusiveMinimum": 0,
+          "title": "Doc Page Words",
+          "type": "integer"
+        },
+        "function_code_lines": {
+          "$ref": "#/$defs/Limit"
+        },
+        "nesting_depth": {
+          "$ref": "#/$defs/Limit"
+        },
+        "parameters": {
+          "$ref": "#/$defs/Limit"
+        },
+        "source_file_lines": {
+          "$ref": "#/$defs/Limit"
+        }
+      },
+      "required": [
+        "source_file_lines",
+        "function_code_lines",
+        "cyclomatic_complexity",
+        "nesting_depth",
+        "parameters",
+        "doc_page_lines",
+        "doc_page_words",
+        "agents_lines",
+        "agents_words",
+        "blob_bytes"
+      ],
+      "title": "Thresholds",
+      "type": "object"
+    },
+    "Viewport": {
+      "additionalProperties": false,
+      "description": "The size of the page in one browser project.",
+      "properties": {
+        "height": {
+          "maximum": 4320,
+          "minimum": 240,
+          "title": "Height",
+          "type": "integer"
+        },
+        "width": {
+          "maximum": 7680,
+          "minimum": 240,
+          "title": "Width",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "width",
+        "height"
+      ],
+      "title": "Viewport",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The complete repository policy loaded from `quality.toml`.",
+  "properties": {
+    "audit": {
+      "$ref": "#/$defs/AuditPolicy"
+    },
+    "ci": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CiPolicy"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "classification": {
+      "items": {
+        "$ref": "#/$defs/Classification"
+      },
+      "title": "Classification",
+      "type": "array"
+    },
+    "components": {
+      "items": {
+        "$ref": "#/$defs/Component"
+      },
+      "minItems": 1,
+      "title": "Components",
+      "type": "array"
+    },
+    "coverage": {
+      "$ref": "#/$defs/CoveragePolicy"
+    },
+    "exceptions": {
+      "items": {
+        "$ref": "#/$defs/PolicyException"
+      },
+      "title": "Exceptions",
+      "type": "array"
+    },
+    "quarantine": {
+      "items": {
+        "$ref": "#/$defs/Quarantine"
+      },
+      "title": "Quarantine",
+      "type": "array"
+    },
+    "repository": {
+      "$ref": "#/$defs/Repository"
+    },
+    "schema_version": {
+      "const": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "template": {
+      "$ref": "#/$defs/TemplatePolicy"
+    },
+    "thresholds": {
+      "$ref": "#/$defs/Thresholds"
+    }
+  },
+  "required": [
+    "schema_version",
+    "repository",
+    "thresholds",
+    "coverage",
+    "components"
+  ],
+  "title": "quality.toml",
+  "type": "object"
+}
