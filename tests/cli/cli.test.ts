@@ -1,6 +1,7 @@
 import {
   mkdtempSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -128,6 +129,43 @@ it("initializes with a private token file and does not enable a service with --n
   );
   expect(output).not.toContain("abcdefghijklmnopqrstuvwxyz");
 });
+it.each([
+  {
+    path: '/synthetic/space dir/%"\\bin:/usr/bin',
+    expected: 'Environment="PATH=/synthetic/space dir/%%\\"\\\\bin:/usr/bin"',
+  },
+  { path: undefined, expected: undefined },
+])(
+  "writes only the supplied PATH to the service environment: $path",
+  async ({ path, expected }) => {
+    deps.env = { PATH: path, SYNTHETIC_SECRET: "do-not-copy" };
+    expect(
+      await run(
+        [
+          "init",
+          "--token-file",
+          join(directory, "token"),
+          "--user-id",
+          "123",
+          "--sandbox",
+          "read-only",
+          "--no-start",
+        ],
+        deps,
+      ),
+    ).toBe(0);
+    const units = join(directory, "home", ".config", "systemd", "user");
+    const [unitFile] = readdirSync(units);
+    if (unitFile === undefined)
+      throw new Error("Service unit was not generated");
+    const unit = readFileSync(join(units, unitFile), "utf8");
+    const environment = unit
+      .split("\n")
+      .filter((line) => line.startsWith("Environment="));
+    expect(environment).toEqual(expected === undefined ? [] : [expected]);
+    expect(unit).not.toContain("do-not-copy");
+  },
+);
 it("refuses malformed sandbox before writing configuration", async () => {
   expect(
     await run(
@@ -146,6 +184,25 @@ it("refuses malformed sandbox before writing configuration", async () => {
   ).toBe(3);
   expect(errors).toContain("E_CONFIG");
   expect(() => readFileSync(join(directory, ".thc", "config.json"))).toThrow();
+});
+it("rejects a PATH containing a newline when writing the unit", async () => {
+  deps.env = { PATH: "/synthetic/bin\nInjected=value" };
+  expect(
+    await run(
+      [
+        "init",
+        "--token-file",
+        join(directory, "token"),
+        "--user-id",
+        "123",
+        "--sandbox",
+        "read-only",
+        "--no-start",
+      ],
+      deps,
+    ),
+  ).toBe(2);
+  expect(errors).toContain("E_USAGE");
 });
 it("renders only visible history without bridge identifiers", async () => {
   mkdirSync(join(directory, ".thc"));

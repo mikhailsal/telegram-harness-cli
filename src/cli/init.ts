@@ -70,6 +70,7 @@ async function configureUnit(
   home: string,
   directory: string,
   version: string,
+  path: string | undefined,
 ): Promise<string> {
   const units = join(home, ".config", "systemd", "user");
   await mkdir(units, { recursive: true });
@@ -85,7 +86,9 @@ async function configureUnit(
     "cli",
     "main.js",
   );
-  const text = `[Unit]\nDescription=Telegram harness bridge\nAfter=network-online.target\n\n[Service]\nType=simple\nWorkingDirectory=${unitQuote(directory)}\nExecStart=${unitQuote(process.execPath)} ${unitQuote(executable)} start --dir ${unitQuote(directory)}\nRestart=on-failure\n\n[Install]\nWantedBy=default.target\n`;
+  const environment =
+    path === undefined ? "" : `Environment=${unitQuote(`PATH=${path}`)}\n`;
+  const text = `[Unit]\nDescription=Telegram harness bridge\nAfter=network-online.target\n\n[Service]\nType=simple\nWorkingDirectory=${unitQuote(directory)}\n${environment}ExecStart=${unitQuote(process.execPath)} ${unitQuote(executable)} start --dir ${unitQuote(directory)}\nRestart=on-failure\n\n[Install]\nWantedBy=default.target\n`;
   await writeFile(join(units, name), text, { mode: 0o600 });
   return name;
 }
@@ -293,7 +296,12 @@ async function writeInstalledState(
     args.flags.has("force"),
   );
   await registerFolder(deps.home, directory, version);
-  const unit = await configureUnit(deps.home, directory, version);
+  const unit = await configureUnit(
+    deps.home,
+    directory,
+    version,
+    deps.env.PATH,
+  );
   if (!args.flags.has("no-start"))
     await enableService(
       unit,

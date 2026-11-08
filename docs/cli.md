@@ -1,14 +1,86 @@
 # CLI guide
 
-Initialize in the agent folder with an existing private token file, an allowlisted
-Telegram user ID, and an explicit sandbox mode:
+## First start
+
+Follow the [README quickstart](../README.md#getting-started) to build from source
+and create a private token file. Run initialization in the folder where the
+agent should work, using the absolute path to the built CLI. Plain `init`
+prompts for the token file, Telegram user ID and sandbox in a terminal;
+`init --token-file /secure/bot-token` skips only the first prompt.
+
+During the user-ID prompt, send a private message to the bot and enter the
+numeric ID it returns. Use a dedicated bot for this bridge: another process
+polling the same bot can consume its updates or cause a polling conflict.
+
+Sandbox choices are `read-only`, `workspace-write` and `danger-full-access`.
+The choice is required. The default Codex protocol adapter starts its daemon
+automatically when needed.
+
+Without a terminal, supply all required values explicitly:
 
 ```sh
-thc init --token-file /secure/bot-token --user-id 123 --sandbox workspace-write --yes --no-start
+node /path/to/telegram-harness-cli/dist/cli/main.js init \
+  --token-file /secure/bot-token \
+  --user-id 123 \
+  --sandbox workspace-write
+```
+
+By default, `init` enables and starts a systemd user service and waits up to
+120 seconds for a new message to receive its first answer. The unit pins the
+Node executable and records the setup invocation's PATH; other shell
+environment variables are not copied into the service. Configure any custom
+Codex environment, such as a non-default `CODEX_HOME`, in the user service's
+environment before starting it. The token file must be a regular file with
+mode 0600.
+
+The managed CLI is installed as `~/.local/bin/thc`. Add that directory to
+your shell's PATH, or use the absolute executable path. Configuration,
+database and downloaded files are stored in the project's ignored `.thc/`.
+Initialization adds managed history instructions to `AGENTS.md` and installs
+the history skill under `.agents/skills/thc/`.
+
+If `init` warns about linger, `loginctl enable-linger "$USER"` allows the
+user service to survive logout. This is a host setting; follow your host's
+authorization policy if it requires administrator approval.
+
+### Foreground use and preparation only
+
+`--no-start` writes the installation and unit file without enabling or starting
+the service. It still checks that Codex is installed and signed in. This also
+allows foreground use on Linux without a running systemd user session:
+
+```sh
+node /path/to/telegram-harness-cli/dist/cli/main.js init \
+  --token-file /secure/bot-token --user-id 123 \
+  --sandbox workspace-write --no-start
 thc start
 ```
 
-The token file must be a regular file inaccessible to group and other users.
+`thc start` runs in the foreground and keeps that terminal occupied. Use a
+second terminal for inspection, and Ctrl+C to end the foreground process.
+To enable the prepared background service instead, run `thc init --update`
+from the configured project in a working systemd user session.
+
+### Choosing tmux
+
+For tmux, initialize with `--no-start`, install tmux, then edit the existing
+`.thc/config.json` and change `codex.adapter` from `"protocol"` to `"tmux"`.
+Run `thc start` in the foreground, or `thc init --update` to start the user
+service. There is no `--adapter` initialization flag. The measured baseline
+for both adapters is documented in the [README](../README.md).
+
+### Troubleshooting
+
+| Symptom                                   | Check or next action                                                                                                                                                          |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `thc` is not found                        | Add `~/.local/bin` to PATH or use `~/.local/bin/thc`.                                                                                                                         |
+| No answer after initialization            | Run `thc status`, `thc doctor`, then `thc tail --lines 50` in the configured project. Send a new private message after setup starts the bridge.                               |
+| Codex cannot be found or is not signed in | Check `codex --version` and `codex login status` as the service's Linux user. After moving Node or Codex, rerun initialization with `--update` from the intended environment. |
+| Cannot connect to the systemd user bus    | Use a working systemd user session for background setup, or initialize with `--no-start` and use foreground `thc start`.                                                      |
+| Telegram reports a polling conflict       | Stop the other program using this bot token; one bridge should poll it.                                                                                                       |
+
+## Daily use
+
 Use `thc status`, `thc doctor`, and `thc tail` to inspect the bridge. `thc stop`
 signals only the process that owns the folder lock. `thc attach` waits for the
 active turn; `thc attach --now` requests an interrupt when the turn is known.

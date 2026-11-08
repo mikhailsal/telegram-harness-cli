@@ -15,30 +15,96 @@ to compare the installed version with the tested baseline.
 
 ## Getting started
 
-Use Linux, Node.js 24.22.0 or newer, Git, Codex CLI and an existing Codex
-login. The tmux adapter also needs tmux.
+Use Linux, Node.js 24.22.0 or newer with npm, Git, and an authenticated
+Codex CLI. The default background service needs a working systemd user
+session. The optional tmux adapter also needs tmux. Run these commands as
+the Linux user who will run the agent, without `sudo`.
+
+Installation is currently from source; the package is not published to npm.
+Keep the same terminal open through the following steps.
+
+### 1. Download and build
 
 ```sh
+git clone https://github.com/mikhailsal/telegram-harness-cli.git
+cd telegram-harness-cli
 npm ci
 npm run build
-node dist/cli/main.js --help
+THC_SOURCE_DIR="$PWD"
 ```
 
-To prepare a folder, place the bot token in a private file with mode 0600,
-then run:
+Check `codex --version` and `codex login status` before continuing. If needed,
+run `codex login` for this Linux account.
+
+### 2. Create a Telegram bot
+
+Open [@BotFather](https://t.me/BotFather) in Telegram, send `/newbot`, and
+follow its prompts. Keep the bot's username so you can open its private chat.
+Telegram's [bot setup guide](https://core.telegram.org/bots/features#botfather)
+explains this step.
+
+Create a private token file outside your project:
 
 ```sh
-node /path/to/telegram-harness-cli/dist/cli/main.js init \
-  --token-file /private/path/bot-token \
-  --user-id YOUR_TELEGRAM_USER_ID \
-  --sandbox workspace-write
+mkdir -p "$HOME/.config/thc"
+(umask 077; touch "$HOME/.config/thc/bot-token")
+chmod 600 "$HOME/.config/thc/bot-token"
 ```
 
-`init` installs a pinned copy, writes the folder configuration and history
-skill, and prepares a systemd user service. Use `--no-start` to prepare it
-without starting the service. The sandbox choice is explicit. The
-allowlisted Telegram users are trusted to run shell commands as this user.
-Groups are ignored.
+Open that file in your text editor and save only the token supplied by
+BotFather, on one line.
+
+### 3. Initialize the agent's working folder
+
+Initialize in the project where you want Codex to work. This can be an
+existing project; the commands below create a separate example workspace.
+The source checkout from step 1 and the agent's workspace serve different purposes.
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+mkdir -p "$HOME/projects/my-agent"
+cd "$HOME/projects/my-agent"
+node "$THC_SOURCE_DIR/dist/cli/main.js" init \
+  --token-file "$HOME/.config/thc/bot-token"
+```
+
+The interactive setup will:
+
+1. Ask for your Telegram user ID. While the terminal waits, send a private
+   message to your new bot. It replies with your numeric ID; paste that
+   number into the terminal.
+2. Ask for a sandbox. Enter `workspace-write` for project edits or `read-only`
+   for a read-only agent. There is no implicit sandbox choice.
+3. Install a pinned copy, write the project configuration, history skill and
+   managed `AGENTS.md` instructions, and enable the systemd user service. The service retains the PATH used
+   during setup so it can find your Codex installation.
+4. Print `Bridge started. Send a message to the bot.` Send a **new** message,
+   such as `Reply: ready`. Setup reports `Working: first answer in ... s`
+   after the first delivered answer, or diagnostic output after 120 seconds.
+
+The default adapter is the shared Codex protocol. The bridge starts its
+daemon when needed; no separate daemon command is required for this path.
+Allowlisted Telegram users are trusted to run shell commands as this user.
+Groups are ignored, and unallowlisted private users receive only their ID.
+
+### 4. Check the installation
+
+Run these from the agent's working folder:
+
+```sh
+thc status
+thc doctor
+thc tail --lines 50
+```
+
+`status` should show `running: true`. `doctor` reports the token, Codex login,
+version compatibility, service persistence and history checks. Add
+`$HOME/.local/bin` to your shell's PATH for future terminals; the installer
+does not edit your shell startup files.
+
+For a foreground run, setup without starting a service, tmux selection,
+keeping the service alive after logout, and troubleshooting, see the
+[first-start instructions in the CLI guide](docs/cli.md#first-start).
 
 The [CLI guide](docs/cli.md) covers interactive setup, noninteractive flags,
 update and rollback, errors, history search and attach.
