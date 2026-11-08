@@ -1,3 +1,8 @@
 # Synthetic URL fixture in tools/quality/tests/unit/adapters/test_web.py.
 # This exact span is used only with the fake resolver/connector in the URL probe test.
 https://user:secret@a.test:8443
+
+# Hidden-reference fixtures in tests/channels/regular-format.regression.test.ts.
+# Literal escape characters in the second span are part of the scanned source.
+https://user:credential@example.com
+https://user:secret@example.com\n\n<
