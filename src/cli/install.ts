@@ -7,12 +7,15 @@ import { CliError } from "./errors.js";
 import { exists } from "./paths.js";
 import { defaults, type CliDependencies } from "./context.js";
 import { withSetupLock } from "./setup-lock.js";
+import { shim } from "./shim.js";
 
 export interface InstallPaths {
   home: string;
   directory: string;
   packageRoot: string;
   exec?: CliDependencies["exec"];
+  /** The Node the managed command runs on; defaults to the current one. */
+  execPath?: string;
 }
 interface VersionInfo {
   version: string;
@@ -46,6 +49,16 @@ async function readVersion(path: string): Promise<VersionInfo> {
     );
   return { version: versionName(data.version), schema: data.schema };
 }
+/** Whether the installed version keeps its store in this executable's schema. */
+export async function sharesSchema(
+  home: string,
+  version: string,
+): Promise<boolean> {
+  const root = join(home, ".local", "share", "thc", versionName(version));
+  return (
+    (await readVersion(join(root, "version.json"))).schema === SCHEMA_VERSION
+  );
+}
 async function installedSchema(directory: string): Promise<number | undefined> {
   const path = join(directory, ".thc", "store.db");
   if (!(await exists(path))) return undefined;
@@ -72,13 +85,7 @@ async function snapshot(directory: string): Promise<void> {
     db.close();
   }
 }
-function shim(): string {
-  const node = `'${process.execPath.replaceAll("'", "'\\''")}'`;
-  return `#!/bin/sh\n':' //; exec ${node} "$0" "$@"\n// thc-managed-shim v1\nimport { existsSync, readFileSync, readdirSync } from 'node:fs';\nimport { dirname, join, resolve } from 'node:path';\nimport { homedir } from 'node:os';\nimport { spawnSync } from 'node:child_process';\nconst args=process.argv.slice(2); const i=args.indexOf('--dir'); const inline=args.find(x=>x.startsWith('--dir='));
-const override=i>=0 ? args[i+1] : inline?.slice(6);
-let p=resolve(override || process.env.THC_DIR || process.cwd());\nif (p.endsWith('/.thc')) p=dirname(p);\nlet v; for (;;) { const f=join(p,'.thc','version'); if (existsSync(f)) { v=readFileSync(f,'utf8').trim(); break; } const n=dirname(p); if (n===p) break; p=n; }\nconst root=join(homedir(),'.local','share','thc');\nif (!v) v=readdirSync(root).filter(x=>/^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$/.test(x)).sort((a,b)=>{const [aa,ap]=a.split('-',2),[bb,bp]=b.split('-',2);const n=aa.localeCompare(bb,undefined,{numeric:true});return n || (ap===undefined ? 1 : bp===undefined ? -1 : ap.localeCompare(bp,undefined,{numeric:true}));}).at(-1);\nif (!v || !/^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$/.test(v)) { console.error('thc: E_DEPENDENCY: No valid installed version\\nfix: thc init --update'); process.exit(4); }\nconst r=spawnSync(process.execPath,[join(root,v,'dist','cli','main.js'),...process.argv.slice(2)],{stdio:'inherit',env:process.env}); if(r.error) { console.error('thc: E_DEPENDENCY: '+r.error.message+'\\nfix: thc init --update'); process.exit(4); } process.exit(r.status ?? 4);\n`;
-}
-async function writeShim(home: string): Promise<void> {
+async function writeShim(home: string, execPath: string): Promise<void> {
   const directory = join(home, ".local", "bin");
   await mkdir(directory, { recursive: true });
   const path = join(directory, "thc");
@@ -93,7 +100,7 @@ async function writeShim(home: string): Promise<void> {
       );
   }
   const temp = `${path}.${randomUUID()}`;
-  await writeFile(temp, shim(), { mode: 0o755, flag: "wx" });
+  await writeFile(temp, shim(execPath), { mode: 0o755, flag: "wx" });
   await rename(temp, path);
 }
 async function verifyPackage(root: string): Promise<void> {
@@ -197,7 +204,9 @@ export async function install(
       installCurrent(paths, version),
     );
   await snapshot(paths.directory);
-  await withSetupLock(paths.home, "installation", () => writeShim(paths.home));
+  await withSetupLock(paths.home, "installation", () =>
+    writeShim(paths.home, paths.execPath ?? process.execPath),
+  );
   await mkdir(join(paths.directory, ".thc"), { recursive: true, mode: 0o700 });
   const temp = join(paths.directory, ".thc", `.version-${randomUUID()}`);
   await writeFile(temp, `${version}\n`, { mode: 0o600, flag: "wx" });

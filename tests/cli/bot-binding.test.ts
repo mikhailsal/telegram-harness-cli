@@ -12,6 +12,7 @@ import { afterEach, expect, it } from "vitest";
 import { CliError } from "../../src/cli/errors.js";
 import { withBotBinding } from "../../src/cli/bot-binding.js";
 import { withSetupLock } from "../../src/cli/setup-lock.js";
+import { acquireDirectoryLock } from "../../src/core/lock.js";
 import { Store } from "../../src/store/index.js";
 
 const token = "12345:secret_token";
@@ -35,6 +36,18 @@ async function configure(directory: string, value: unknown = {}) {
     join(directory, ".thc", "config.json"),
     JSON.stringify(value),
   );
+}
+/** Persist the identity a bridge records once it has talked to its bot. */
+function identify(directory: string, botId: string) {
+  const store = new Store(join(directory, ".thc", "store.db"));
+  store.putEntity({
+    id: "entity",
+    directory,
+    botId,
+    createdAt: "2026-01-01",
+  });
+  store.setCursor("entity-id", "entity");
+  store.close();
 }
 function deferred() {
   let done!: () => void;
@@ -108,6 +121,33 @@ it("retains a failed setup that wrote config and reclaims missing projects", asy
     withBotBinding(home, b, token, {}, () => Promise.resolve(1)),
   ).resolves.toBe(1);
 });
+it("keeps a claim while its bridge still runs after the configuration was removed", async () => {
+  const { home, a, b } = await fixture();
+  await withBotBinding(home, a, token, {}, () => configure(a));
+  await rm(join(a, ".thc", "config.json"));
+  const bridge = await acquireDirectoryLock(a);
+  await expect(
+    withBotBinding(home, b, token, {}, () => Promise.resolve()),
+  ).rejects.toThrow(a);
+  await bridge.release();
+  await expect(
+    withBotBinding(home, b, token, {}, () => Promise.resolve(1)),
+  ).resolves.toBe(1);
+});
+it("refuses to reclaim a claim whose running state cannot be read", async () => {
+  const { home, a, b } = await fixture();
+  await withBotBinding(home, a, token, {}, () => configure(a));
+  await rm(join(a, ".thc", "config.json"));
+  await mkdir(join(a, ".thc", "lock-owner.json"));
+  await expect(
+    withBotBinding(home, b, token, {}, () => Promise.resolve()),
+  ).rejects.toMatchObject({
+    info: {
+      code: "E_CONFIG",
+      what: `Cannot identify the bot configured for ${a}`,
+    },
+  });
+});
 it("does not trust a caller environment to replace a binding", async () => {
   const { home, a, b } = await fixture();
   await withBotBinding(home, a, token, {}, async () => {
@@ -142,6 +182,41 @@ it("uses persisted bot identity instead of the caller environment", async () => 
   await expect(
     withBotBinding(home, b, "999:other", {}, () => Promise.resolve(1)),
   ).resolves.toBe(1);
+});
+it("keeps the bot of a registered legacy project whose bridge runs without its configuration", async () => {
+  const { home, a, b } = await fixture();
+  await mkdir(join(a, ".thc"), { recursive: true });
+  identify(a, "12345");
+  const root = join(home, ".local/share/thc");
+  await mkdir(root, { recursive: true });
+  await writeFile(join(root, "folders"), JSON.stringify({ [a]: "1.0.0" }));
+  const bridge = await acquireDirectoryLock(a);
+  await expect(
+    withBotBinding(home, b, token, {}, () => Promise.resolve()),
+  ).rejects.toThrow(a);
+  await expect(
+    withBotBinding(home, b, "999:other", {}, () => Promise.resolve(1)),
+  ).resolves.toBe(1);
+  await bridge.release();
+  await expect(
+    withBotBinding(home, b, token, {}, () => Promise.resolve(1)),
+  ).resolves.toBe(1);
+});
+it("refuses to guess the bot of a running legacy project without a readable identity", async () => {
+  const { home, a, b } = await fixture();
+  const root = join(home, ".local/share/thc");
+  await mkdir(root, { recursive: true });
+  await writeFile(join(root, "folders"), JSON.stringify({ [a]: "1.0.0" }));
+  const bridge = await acquireDirectoryLock(a);
+  await expect(
+    withBotBinding(home, b, token, {}, () => Promise.resolve()),
+  ).rejects.toMatchObject({
+    info: {
+      code: "E_CONFIG",
+      what: `Cannot identify the bot configured for ${a}`,
+    },
+  });
+  await bridge.release();
 });
 it.each(["missing", "malformed"])(
   "reports an unidentifiable legacy %s configuration",
@@ -249,4 +324,23 @@ it("reports an unreadable registered configuration with its project path", async
   if (!(error instanceof CliError)) throw new Error("Expected CliError");
   expect(error.info.code).toBe("E_CONFIG");
   expect(error.info.fix).toContain(a);
+});
+
+it("lets the folder that holds the claim rerun despite an unrelated unidentifiable folder", async () => {
+  const { home, a, b } = await fixture();
+  await withBotBinding(home, a, token, {}, () => configure(a));
+  await configure(b, { token: { env: "MISSING" } });
+  const root = join(home, ".local/share/thc");
+  await writeFile(join(root, "folders"), JSON.stringify({ [b]: "1.0.0" }));
+  await expect(
+    withBotBinding(home, a, token, {}, () => Promise.resolve(1)),
+  ).resolves.toBe(1);
+  const c = join(home, "c");
+  await mkdir(c);
+  const error = await withBotBinding(home, c, "999:other", {}, () =>
+    Promise.resolve(),
+  ).catch((value: unknown) => value);
+  expect(error).toBeInstanceOf(CliError);
+  if (!(error instanceof CliError)) throw new Error("Expected CliError");
+  expect(error.info.fix).toContain(b);
 });

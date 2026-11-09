@@ -47,6 +47,7 @@ The wizard then guides you through:
 The default adapter uses the shared Codex protocol and starts its daemon when
 needed. A second run keeps the project's configuration and selected version;
 a running bridge continues without a restart. A stopped bridge is started.
+To apply an edit to `.thc/config.json`, run `thc stop` and then `thc init`.
 Explicit updates and preparation without starting a service are described in
 the [CLI guide](docs/cli.md#first-start).
 

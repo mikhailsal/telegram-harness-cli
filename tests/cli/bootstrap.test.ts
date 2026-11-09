@@ -2,6 +2,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   copyFileSync,
+  existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -25,7 +26,11 @@ function executable(name: string, body: string): void {
     mode: 0o755,
   });
 }
-function run(input?: string, args: string[] = []) {
+function run(
+  input?: string,
+  args: string[] = [],
+  extraEnv: Record<string, string> = {},
+) {
   return spawnSync(
     "bash",
     input === undefined ? [script, ...args] : ["-s", "--", ...args],
@@ -38,6 +43,7 @@ function run(input?: string, args: string[] = []) {
         XDG_DATA_HOME: join(home, ".local", "share"),
         PATH: `${bin}:/usr/bin:/bin`,
         FIXTURE: root,
+        ...extraEnv,
       },
       input,
       encoding: "utf8",
@@ -123,7 +129,7 @@ it("builds once, preserves the project, and does not pass the piped script as in
   expect(second.stdout).toContain("--no-start");
   expect(
     readFileSync(join(root, "npm.log"), "utf8").trim().split("\n"),
-  ).toEqual(["ci", "run build"]);
+  ).toEqual(["ci --include=dev", "run build"]);
   expect(
     readFileSync(join(root, "downloads"), "utf8").match(/codeload/g),
   ).toHaveLength(1);
@@ -137,6 +143,29 @@ it("stops before executing the CLI if the source download fails", () => {
   const result = run();
   expect(result.status).not.toBe(0);
   expect(result.stdout).not.toContain('"args"');
+});
+
+it("installs development dependencies for the build when the environment omits them", () => {
+  executable(
+    "npm",
+    `
+printf '%s\\n' "$*" >> "$FIXTURE/npm.log"
+case "$1" in
+  ci)
+    mkdir -p node_modules
+    # Like npm: NODE_ENV=production skips dev dependencies unless they are requested.
+    if [[ "\${NODE_ENV:-}" != production || "$*" == *--include=dev* ]]; then
+      mkdir -p node_modules/typescript/bin && : > node_modules/typescript/bin/tsc
+    fi ;;
+  run)
+    [[ -e node_modules/typescript/bin/tsc ]] || { echo 'build: typescript is not installed' >&2; exit 1; }
+    mkdir -p dist/cli
+    echo "console.log(JSON.stringify({args: process.argv.slice(2)}));" > dist/cli/main.js ;;
+esac`,
+  );
+  const result = run(undefined, [], { NODE_ENV: "production" });
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.stdout).toContain('"args"');
 });
 
 it("reports missing prerequisites before making changes", () => {
@@ -199,14 +228,18 @@ fi
   return { archive, checksum };
 }
 
-function mockNodeDownloads(archive: string, checksum: string): void {
+function mockNodeDownloads(
+  archive: string,
+  checksum: string,
+  listed = archive,
+): void {
   executable(
     "curl",
     `
 url=$6
 out=$8
 case "$url" in
-  *SHASUMS256.txt) printf '%s  %s\n' '${checksum}' '${archive}' > "$out" ;;
+  *SHASUMS256.txt) printf '%s  %s\n' '${checksum}' '${listed}' > "$out" ;;
   *nodejs.org*) cp "$FIXTURE/${archive}" "$out" ;;
   *api.github.com*) printf '%s' '{"sha":"${sha}","commit":{"committer":{"date":"2026-01-01T00:00:00Z"}}}' > "$out" ;;
   *codeload.github.com*) cp "$FIXTURE/source.tar.gz" "$out" ;;
@@ -237,4 +270,25 @@ it("verifies and installs private Node and missing Codex", () => {
       "utf8",
     ),
   ).toContain("exit 0");
+});
+
+function refusedNode(wrongChecksum?: string, listedName?: string) {
+  const { archive, checksum } = preparePrivateNode();
+  mockNodeDownloads(archive, wrongChecksum ?? checksum, listedName);
+  const result = run();
+  expect(result.status).not.toBe(0);
+  expect(result.stdout).not.toContain('"args"');
+  const toolchains = join(home, ".local", "share", "thc", "toolchains");
+  expect(existsSync(join(toolchains, "node-v24.22.0"))).toBe(false);
+  return result;
+}
+
+it("refuses a private Node archive whose checksum does not match", () => {
+  expect(refusedNode("0".repeat(64)).stdout).toContain("FAILED");
+});
+
+it("refuses a private Node archive that has no checksum entry", () => {
+  expect(refusedNode(undefined, "node-v0.0.0-other.tar.gz").stderr).toContain(
+    "bootstrap: Node checksum was not found.",
+  );
 });

@@ -1,7 +1,7 @@
 import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { readLockOwner } from "../core/lock.js";
-import { openStore, Store } from "../store/index.js";
+import { Store } from "../store/index.js";
 import { writeAgentInstructions } from "./skill.js";
 import { doctor } from "./admin.js";
 import { respondWithPrivateIds } from "./identity.js";
@@ -23,9 +23,13 @@ import { withSetupLock } from "./setup-lock.js";
 import { configureUnit, isActive } from "./service-unit.js";
 import {
   alreadyRunning,
+  assertSettingsMatch,
   configuredDirectory,
   installedTarget,
+  markFirstRun,
+  onboardingFor,
   reportCliPath,
+  type Onboarding,
 } from "./init-options.js";
 
 async function ignoreState(directory: string): Promise<void> {
@@ -186,7 +190,7 @@ async function enableService(
   config: Awaited<ReturnType<typeof loadConfig>>,
   deps: CliDependencies,
   restart: boolean,
-  existing: boolean,
+  onboarding: Onboarding,
 ): Promise<void> {
   if (
     !restart &&
@@ -196,18 +200,12 @@ async function enableService(
   if (restart)
     await deps.exec("systemctl", ["--user", "stop", unit], { env: deps.env });
   const start = new Date(deps.now()).toISOString();
-  const store = openStore(join(directory, ".thc", "store.db"));
-  try {
-    if (!existing) store.setCursor("first-delivery-at", "");
-    if (!existing) store.setCursor("welcome-pending", start);
-  } finally {
-    store.close();
-  }
+  const firstRun = markFirstRun(directory, onboarding, start);
   await deps.exec("systemctl", ["--user", "daemon-reload"], { env: deps.env });
   await deps.exec("systemctl", ["--user", "enable", "--now", unit], {
     env: deps.env,
   });
-  if (!existing) await waitForFirstAnswer(directory, config, start, deps);
+  if (firstRun) await waitForFirstAnswer(directory, config, start, deps);
 }
 async function writeInstalledState(
   directory: string,
@@ -244,7 +242,7 @@ async function writeInstalledState(
       config,
       deps,
       args.flags.has("update") || Boolean(flag(args, "to")),
-      existing,
+      await onboardingFor(deps.home, version, existing),
     );
 }
 export async function init(
@@ -268,7 +266,10 @@ export async function init(
       "thc init --help",
       2,
     );
-  const directory = await realpath(resolve(flag(args, "dir") ?? deps.cwd));
+  const requested = resolve(flag(args, "dir") ?? deps.cwd);
+  // A project folder that does not exist yet is created, as it always was.
+  await mkdir(requested, { recursive: true });
+  const directory = await realpath(requested);
   await withSetupLock(deps.home, `project:${directory}`, async () =>
     initialize(args, deps, await configuredDirectory(directory)),
   );
@@ -284,6 +285,7 @@ async function initialize(
     await loadConfig(directory);
   }
   const prior = existing ? await loadConfig(directory) : undefined;
+  if (prior) assertSettingsMatch(args, prior, directory);
   const credentials = await initCredentials(args, deps, directory, prior);
   await withBotBinding(
     deps.home,
@@ -292,7 +294,9 @@ async function initialize(
     deps.env,
     async () => {
       if (prior && (await alreadyRunning(args, directory, deps, isActive))) {
-        deps.stdout(`Already initialized and running: ${directory}.\n`);
+        deps.stdout(
+          `Already initialized and running: ${directory}. Configuration edits take effect after thc stop and thc init.\n`,
+        );
         return;
       }
       await completeInit(args, deps, directory, prior, credentials);

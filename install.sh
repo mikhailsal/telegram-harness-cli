@@ -87,7 +87,9 @@ for (const name of ['package.json', 'package-lock.json']) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2) + '\n');
 }
 NODE
-    (cd "$work_dir/source" && npm ci && npm run build)
+    # The build needs TypeScript, a development dependency. Without the flag a
+    # production-style environment (NODE_ENV=production, npm omit=dev) skips it.
+    (cd "$work_dir/source" && npm ci --include=dev && npm run build)
     [[ -f $work_dir/source/dist/cli/main.js ]] || fail 'Build did not produce the CLI.'
     [[ ! -e $destination ]] || fail "Incomplete cache exists: $destination"
     mv "$work_dir/source" "$destination"

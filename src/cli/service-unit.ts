@@ -33,6 +33,18 @@ export async function isActive(
     return false;
   }
 }
+// The service must find the managed `thc` shim, which the agent's instructions
+// call, even when the installing shell did not have its directory on PATH. It
+// goes last so that nothing in that user directory shadows the caller's tools.
+function servicePath(
+  home: string,
+  path: string | undefined,
+): string | undefined {
+  if (path === undefined) return undefined;
+  const managed = join(home, ".local", "bin");
+  if (path === "") return managed;
+  return path.split(":").includes(managed) ? path : `${path}:${managed}`;
+}
 export async function configureUnit(
   home: string,
   directory: string,
@@ -52,8 +64,11 @@ export async function configureUnit(
     "cli",
     "main.js",
   );
+  const unitPath = servicePath(home, path);
   const environment =
-    path === undefined ? "" : `Environment=${unitQuote(`PATH=${path}`)}\n`;
+    unitPath === undefined
+      ? ""
+      : `Environment=${unitQuote(`PATH=${unitPath}`)}\n`;
   const text = `[Unit]\nDescription=Telegram harness bridge\nAfter=network-online.target\n\n[Service]\nType=simple\nWorkingDirectory=${unitQuote(directory)}\n${environment}ExecStart=${unitQuote(process.execPath)} ${unitQuote(executable)} start --dir ${unitQuote(directory)}\nRestart=on-failure\n\n[Install]\nWantedBy=default.target\n`;
   await writeFile(join(units, name), text, { mode: 0o600 });
   return name;

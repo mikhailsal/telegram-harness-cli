@@ -1,6 +1,7 @@
 import { readFile, realpath, unlink } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { resolveToken, tokenSchema } from "../core/config.js";
+import { readLockOwner } from "../core/lock.js";
 import { atomicJson, isMissing } from "../core/state.js";
 import { Store } from "../store/index.js";
 import { CliError } from "./errors.js";
@@ -28,6 +29,14 @@ async function configured(path: string): Promise<boolean> {
     return true;
   } catch (error) {
     if (isMissing(error)) return false;
+    return unidentified(path);
+  }
+}
+/** A bridge that is polling holds its bot even if its configuration is gone. */
+async function running(path: string): Promise<boolean> {
+  try {
+    return Boolean(await readLockOwner(path));
+  } catch {
     return unidentified(path);
   }
 }
@@ -97,6 +106,23 @@ async function ownerBot(
   if ("env" in token && id !== candidate) return unidentified(path);
   return id;
 }
+/**
+ * Without configuration only a running bridge still holds its bot, and only
+ * the identity it persisted can say which one; if that cannot be read, the
+ * project must keep blocking rather than disappear from consideration.
+ */
+async function runningBot(path: string): Promise<string | undefined> {
+  if (!(await running(path))) return undefined;
+  return storedBot(path) ?? unidentified(path);
+}
+async function legacyBot(
+  path: string,
+  env: NodeJS.ProcessEnv,
+  candidate: string,
+): Promise<string | undefined> {
+  if (await configured(path)) return ownerBot(path, env, candidate);
+  return runningBot(path);
+}
 async function legacyOwner(
   home: string,
   id: string,
@@ -111,7 +137,7 @@ async function legacyOwner(
   for (const path of Object.keys(folders)) {
     const owner = await canonical(path);
     if (owner === directory) continue;
-    if ((await ownerBot(owner, env, id)) === id) return owner;
+    if ((await legacyBot(owner, env, id)) === id) return owner;
   }
   return undefined;
 }
@@ -150,7 +176,10 @@ async function assertAvailable(
   env: NodeJS.ProcessEnv,
 ): Promise<void> {
   const owner = await bindingOwner(path);
-  if (owner && owner !== project && (await configured(owner))) {
+  // The claim was granted to this folder after the same checks, so an
+  // unrelated registered folder must not block an idempotent rerun.
+  if (owner === project) return;
+  if (owner && ((await configured(owner)) || (await running(owner)))) {
     const existingId = await ownerBot(owner, env, id);
     if (!existingId || existingId === id) conflict(owner);
   }

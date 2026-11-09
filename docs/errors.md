@@ -21,7 +21,10 @@ No `.thc` directory was found. Change to the agent folder or run `thc init`.
 ## E_CONFIG
 
 The configuration or token is invalid. Run `thc doctor` and fix the reported
-configuration before restarting.
+configuration before restarting. `thc init` also reports it when `--sandbox`,
+`--user-id` or `--token-file` contradicts the saved configuration; edit
+`.thc/config.json` instead, then run `thc stop` and `thc init` so the running
+bridge restarts with the edit.
 
 ## E_TIME_FORMAT
 
@@ -43,6 +46,8 @@ A required program, service, or store operation failed. Run `thc doctor`.
 ## E_ALREADY_RUNNING
 
 Another process owns the folder lock. Use `thc status` or `thc attach`.
+`thc stop` reports it when the bridge still runs 15 seconds after the stop
+request.
 
 ## E_INTERNAL
 
