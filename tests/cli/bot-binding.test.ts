@@ -1,54 +1,18 @@
-import {
-  mkdtemp,
-  mkdir,
-  readFile,
-  rm,
-  symlink,
-  writeFile,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { CliError } from "../../src/cli/errors.js";
 import { withBotBinding } from "../../src/cli/bot-binding.js";
 import { withSetupLock } from "../../src/cli/setup-lock.js";
 import { acquireDirectoryLock } from "../../src/core/lock.js";
-import { Store } from "../../src/store/index.js";
+import {
+  configure,
+  fixture,
+  removeFixtures,
+  token,
+} from "./binding-fixtures.js";
 
-const token = "12345:secret_token";
-const roots: string[] = [];
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
-async function fixture() {
-  const home = await mkdtemp(join(tmpdir(), "thc-binding-"));
-  roots.push(home);
-  const a = join(home, "a");
-  const b = join(home, "b");
-  await Promise.all([mkdir(a), mkdir(b)]);
-  return { home, a, b };
-}
-async function configure(directory: string, value: unknown = {}) {
-  await mkdir(join(directory, ".thc"), { recursive: true });
-  await writeFile(
-    join(directory, ".thc", "config.json"),
-    JSON.stringify(value),
-  );
-}
-/** Persist the identity a bridge records once it has talked to its bot. */
-function identify(directory: string, botId: string) {
-  const store = new Store(join(directory, ".thc", "store.db"));
-  store.putEntity({
-    id: "entity",
-    directory,
-    botId,
-    createdAt: "2026-01-01",
-  });
-  store.setCursor("entity-id", "entity");
-  store.close();
-}
+afterEach(removeFixtures);
 function deferred() {
   let done!: () => void;
   const promise = new Promise<void>((resolve) => {
@@ -159,104 +123,6 @@ it("does not trust a caller environment to replace a binding", async () => {
     ),
   ).rejects.toThrow(a);
 });
-it("uses persisted bot identity instead of the caller environment", async () => {
-  const { home, a, b } = await fixture();
-  await configure(a, { token: { env: "BOT" } });
-  const store = new Store(join(a, ".thc", "store.db"));
-  store.putEntity({
-    id: "entity",
-    directory: a,
-    botId: "12345",
-    createdAt: "2026-01-01",
-  });
-  store.setCursor("entity-id", "entity");
-  store.close();
-  const root = join(home, ".local/share/thc");
-  await mkdir(root, { recursive: true });
-  await writeFile(join(root, "folders"), JSON.stringify({ [a]: "1.0.0" }));
-  await expect(
-    withBotBinding(home, b, token, { BOT: "999:other" }, () =>
-      Promise.resolve(),
-    ),
-  ).rejects.toThrow(a);
-  await expect(
-    withBotBinding(home, b, "999:other", {}, () => Promise.resolve(1)),
-  ).resolves.toBe(1);
-});
-it("keeps the bot of a registered legacy project whose bridge runs without its configuration", async () => {
-  const { home, a, b } = await fixture();
-  await mkdir(join(a, ".thc"), { recursive: true });
-  identify(a, "12345");
-  const root = join(home, ".local/share/thc");
-  await mkdir(root, { recursive: true });
-  await writeFile(join(root, "folders"), JSON.stringify({ [a]: "1.0.0" }));
-  const bridge = await acquireDirectoryLock(a);
-  await expect(
-    withBotBinding(home, b, token, {}, () => Promise.resolve()),
-  ).rejects.toThrow(a);
-  await expect(
-    withBotBinding(home, b, "999:other", {}, () => Promise.resolve(1)),
-  ).resolves.toBe(1);
-  await bridge.release();
-  await expect(
-    withBotBinding(home, b, token, {}, () => Promise.resolve(1)),
-  ).resolves.toBe(1);
-});
-it("refuses to guess the bot of a running legacy project without a readable identity", async () => {
-  const { home, a, b } = await fixture();
-  const root = join(home, ".local/share/thc");
-  await mkdir(root, { recursive: true });
-  await writeFile(join(root, "folders"), JSON.stringify({ [a]: "1.0.0" }));
-  const bridge = await acquireDirectoryLock(a);
-  await expect(
-    withBotBinding(home, b, token, {}, () => Promise.resolve()),
-  ).rejects.toMatchObject({
-    info: {
-      code: "E_CONFIG",
-      what: `Cannot identify the bot configured for ${a}`,
-    },
-  });
-  await bridge.release();
-});
-it.each(["missing", "malformed"])(
-  "reports an unidentifiable legacy %s configuration",
-  async (kind) => {
-    const { home, a, b } = await fixture();
-    await configure(a, { token: { env: "MISSING" } });
-    if (kind === "malformed")
-      await writeFile(join(a, ".thc", "config.json"), "{");
-    const root = join(home, ".local/share/thc");
-    await mkdir(root, { recursive: true });
-    await writeFile(
-      join(root, "folders"),
-      JSON.stringify({ [a]: "1.0.0", [join(home, "deleted")]: "1.0.0" }),
-    );
-    const error = await withBotBinding(home, b, token, {}, () =>
-      Promise.resolve(),
-    ).catch((e: unknown) => e);
-    expect(String(error)).toContain(a);
-    expect(error).toMatchObject({ info: { code: "E_CONFIG" } });
-    expect(String(error)).not.toContain(token);
-  },
-);
-it.each(["file", "env"])(
-  "finds legacy %s tokens without exposing them",
-  async (kind) => {
-    const { home, a, b } = await fixture();
-    await writeFile(join(a, "token"), token, { mode: 0o600 });
-    await configure(a, {
-      token: kind === "file" ? { file: "token" } : { env: "BOT" },
-    });
-    const root = join(home, ".local/share/thc");
-    await mkdir(root, { recursive: true });
-    await writeFile(join(root, "folders"), JSON.stringify({ [a]: "1.0.0" }));
-    const error = await withBotBinding(home, b, token, { BOT: token }, () =>
-      Promise.resolve(),
-    ).catch((e: unknown) => e);
-    expect(String(error)).toContain(a);
-    expect(String(error)).not.toContain(token);
-  },
-);
 it("times out and releases the setup lease after errors", async () => {
   const { home } = await fixture();
   const entered = deferred();

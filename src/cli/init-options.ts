@@ -2,7 +2,7 @@ import { readFile, realpath } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import type { Config } from "../core/config.js";
 import { readLockOwner } from "../core/lock.js";
-import { openStore, Store } from "../store/index.js";
+import { openStore, readStoreIdentity } from "../store/index.js";
 import type { Arguments } from "./arguments.js";
 import { flag } from "./arguments.js";
 import type { CliDependencies } from "./context.js";
@@ -10,28 +10,25 @@ import { CliError } from "./errors.js";
 import { sharesSchema } from "./install.js";
 import { exists } from "./paths.js";
 
-/** Keep the identity of a legacy symlinked project when it still resolves here. */
+async function resolvesTo(path: string, target: string): Promise<boolean> {
+  try {
+    return (await realpath(path)) === target;
+  } catch {
+    // A folder that is gone or cannot be resolved is not this project.
+    return false;
+  }
+}
+/**
+ * Keep the identity of a legacy symlinked project when it still resolves here.
+ * A store that exists but cannot be read stops setup: guessing would give the
+ * project a second service name that its own store then rejects.
+ */
 export async function configuredDirectory(canonical: string): Promise<string> {
   const database = join(canonical, ".thc", "store.db");
   if (!(await exists(database))) return canonical;
-  try {
-    const store = new Store(database, true);
-    let directory: string | undefined;
-    try {
-      const id = store.getCursor("entity-id");
-      directory = id ? store.getEntity(id)?.directory : undefined;
-    } finally {
-      store.close();
-    }
-    if (
-      directory &&
-      isAbsolute(directory) &&
-      (await realpath(directory)) === canonical
-    )
-      return directory;
-  } catch {
-    // Missing or unreadable legacy identity is handled by normal initialization checks.
-  }
+  const saved = readStoreIdentity(database)?.directory;
+  if (saved && isAbsolute(saved) && (await resolvesTo(saved, canonical)))
+    return saved;
   return canonical;
 }
 export async function installedTarget(

@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { expect, it } from "vitest";
@@ -11,7 +11,6 @@ import { CliError } from "../../src/cli/errors.js";
 import {
   alreadyRunning,
   assertSettingsMatch,
-  configuredDirectory,
   installedTarget,
   markFirstRun,
   onboardingFor,
@@ -86,36 +85,6 @@ it("checks active services only on ordinary reruns and reports the CLI location 
     expect(output).toBe("");
   } finally {
     await rm(dir, { recursive: true, force: true });
-  }
-});
-
-it("preserves a stored symlink identity only while it resolves to this project", async () => {
-  const root = await mkdtemp(join(tmpdir(), "thc-legacy-alias-"));
-  try {
-    const directory = join(root, "project");
-    const alias = join(root, "alias");
-    const other = join(root, "other");
-    await mkdir(join(directory, ".thc"), { recursive: true });
-    await mkdir(other);
-    await symlink(directory, alias);
-    expect(await configuredDirectory(directory)).toBe(directory);
-    const store = new Store(join(directory, ".thc", "store.db"));
-    expect(await configuredDirectory(directory)).toBe(directory);
-    store.putEntity({
-      id: "entity",
-      directory: alias,
-      botId: "123",
-      createdAt: "2026-01-01",
-    });
-    store.setCursor("entity-id", "entity");
-    store.close();
-    expect(await configuredDirectory(directory)).toBe(alias);
-    await rm(alias);
-    expect(await configuredDirectory(directory)).toBe(directory);
-    await symlink(other, alias);
-    expect(await configuredDirectory(directory)).toBe(directory);
-  } finally {
-    await rm(root, { recursive: true, force: true });
   }
 });
 

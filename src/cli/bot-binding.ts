@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import { resolveToken, tokenSchema } from "../core/config.js";
 import { readLockOwner } from "../core/lock.js";
 import { atomicJson, isMissing } from "../core/state.js";
-import { Store } from "../store/index.js";
+import { readStoreIdentity } from "../store/index.js";
 import { CliError } from "./errors.js";
 import { withSetupLock } from "./setup-lock.js";
 
@@ -57,18 +57,11 @@ function unidentified(path: string): never {
   );
 }
 function storedBot(path: string): string | undefined {
-  const database = join(path, ".thc", "store.db");
   try {
-    const store = new Store(database, true);
-    try {
-      const entity = store.getCursor("entity-id");
-      const id = entity ? store.getEntity(entity)?.botId : undefined;
-      return id && /^\d+$/.test(id) ? id : undefined;
-    } finally {
-      store.close();
-    }
+    const id = readStoreIdentity(join(path, ".thc", "store.db"))?.botId;
+    return id && /^\d+$/.test(id) ? id : undefined;
   } catch {
-    // An absent, old, or unreadable store cannot establish ownership.
+    // An absent or unreadable store cannot establish ownership.
     return undefined;
   }
 }
