@@ -1,5 +1,13 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -73,6 +81,43 @@ it("holds an exclusive flock and waits for release before immediate reacquisitio
     expect(await stopDirectory(root)).toBe(false);
   } finally {
     await rm(root, { recursive: true, force: true });
+  }
+});
+it("recognizes its owner through any spelling of the same folder", async () => {
+  const base = await mkdtemp(join(tmpdir(), "thc-lock-alias-"));
+  try {
+    const root = join(base, "project");
+    const alias = join(base, "alias");
+    await mkdir(root);
+    await symlink(root, alias);
+    const started = await acquireDirectoryLock(alias);
+    expect((await readLockOwner(root))?.instance).toBe(started.owner.instance);
+    expect((await readLockOwner(alias))?.instance).toBe(started.owner.instance);
+    await started.release();
+    const direct = await acquireDirectoryLock(root);
+    expect((await readLockOwner(alias))?.instance).toBe(direct.owner.instance);
+    await direct.release();
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+it("does not accept a record that names another folder as its owner", async () => {
+  const base = await mkdtemp(join(tmpdir(), "thc-lock-copy-"));
+  try {
+    const original = join(base, "original");
+    const copy = join(base, "copy");
+    await mkdir(copy);
+    const lease = await acquireDirectoryLock(original);
+    await cp(join(original, ".thc"), join(copy, ".thc"), { recursive: true });
+    expect(await readLockOwner(copy)).toBeUndefined();
+    await writeFile(
+      join(copy, ".thc", "lock-owner.json"),
+      JSON.stringify({ ...lease.owner, directory: join(base, "gone") }),
+    );
+    expect(await readLockOwner(copy)).toBeUndefined();
+    await lease.release();
+  } finally {
+    await rm(base, { recursive: true, force: true });
   }
 });
 it("releases a killed owner and only signals the owned child", async () => {

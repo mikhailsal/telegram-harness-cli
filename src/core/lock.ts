@@ -5,6 +5,7 @@ import {
   mkdir,
   open,
   readFile,
+  realpath,
   unlink,
   type FileHandle,
 } from "node:fs/promises";
@@ -40,6 +41,24 @@ async function processStart(pid: number): Promise<string> {
   return start;
 }
 
+/**
+ * Whether a record names this folder, however its path was spelled when the
+ * bridge started: a project reached through a symlink is one folder. A copied
+ * `.thc` names another folder, and so does a recorded path that cannot be
+ * resolved, exactly as when only the spelling was compared.
+ */
+async function namesFolder(
+  recorded: string,
+  directory: string,
+): Promise<boolean> {
+  if (recorded === resolve(directory)) return true;
+  try {
+    return (await realpath(recorded)) === (await realpath(directory));
+  } catch {
+    return false;
+  }
+}
+
 export async function readLockOwner(
   directory: string,
 ): Promise<LockOwner | undefined> {
@@ -49,7 +68,7 @@ export async function readLockOwner(
     );
     const owner = ownerSchema.parse(value);
     if (
-      owner.directory !== resolve(directory) ||
+      !(await namesFolder(owner.directory, directory)) ||
       (await processStart(owner.pid)) !== owner.start
     )
       return;

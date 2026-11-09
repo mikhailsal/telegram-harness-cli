@@ -72,15 +72,41 @@ export async function status(
     store.close();
   }
 }
+const stopWaitMs = 15_000;
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
 export async function stop(
   directory: string,
   deps: CliDependencies,
 ): Promise<void> {
-  deps.stdout(
-    (await stopDirectory(directory))
-      ? "Stop requested.\n"
-      : "Bridge is not running.\n",
-  );
+  const owner = await readLockOwner(directory);
+  if (!owner) {
+    deps.stdout("Bridge is not running.\n");
+    return;
+  }
+  await stopDirectory(directory);
+  deps.stdout("Stop requested.\n");
+  // The next command may start the bridge again (thc stop && thc init); it must
+  // not find the old process still shutting down and decide that nothing is due.
+  // The lock record goes first, so the process itself has to be gone as well.
+  const deadline = deps.now() + stopWaitMs;
+  while ((await readLockOwner(directory)) || alive(owner.pid)) {
+    if (deps.now() >= deadline)
+      throw new CliError(
+        "E_ALREADY_RUNNING",
+        `The bridge did not stop within ${String(stopWaitMs / 1000)} seconds`,
+        "thc status",
+        3,
+      );
+    await deps.sleep(100);
+  }
+  deps.stdout("Stopped.\n");
 }
 async function checkProgram(
   file: string,

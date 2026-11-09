@@ -129,16 +129,24 @@ it("initializes with a private token file and does not enable a service with --n
   );
   expect(output).not.toContain("abcdefghijklmnopqrstuvwxyz");
 });
+// "@BIN@" stands for the managed CLI directory under the synthetic home.
 it.each([
   {
     path: '/synthetic/space dir/%"\\bin:/usr/bin',
-    expected: 'Environment="PATH=/synthetic/space dir/%%\\"\\\\bin:/usr/bin"',
+    expected:
+      'Environment="PATH=/synthetic/space dir/%%\\"\\\\bin:/usr/bin:@BIN@"',
   },
+  { path: "/usr/bin:@BIN@", expected: 'Environment="PATH=/usr/bin:@BIN@"' },
+  { path: "", expected: 'Environment="PATH=@BIN@"' },
   { path: undefined, expected: undefined },
 ])(
-  "writes only the supplied PATH to the service environment: $path",
+  "gives the service the supplied PATH and the managed CLI directory: $path",
   async ({ path, expected }) => {
-    deps.env = { PATH: path, SYNTHETIC_SECRET: "do-not-copy" };
+    const managed = join(directory, "home", ".local", "bin");
+    deps.env = {
+      PATH: path?.replaceAll("@BIN@", managed),
+      SYNTHETIC_SECRET: "do-not-copy",
+    };
     expect(
       await run(
         [
@@ -162,7 +170,9 @@ it.each([
     const environment = unit
       .split("\n")
       .filter((line) => line.startsWith("Environment="));
-    expect(environment).toEqual(expected === undefined ? [] : [expected]);
+    expect(environment).toEqual(
+      expected === undefined ? [] : [expected.replaceAll("@BIN@", managed)],
+    );
     expect(unit).not.toContain("do-not-copy");
   },
 );

@@ -226,3 +226,8 @@ review = 2027-10-31
 pattern = ".gstack-redact-allowlist"
 category = "assets"
 reason = "Exact synthetic URL fixture spans for the publication credential guard."
+
+[[classification]]
+pattern = "install.sh"
+category = "config"
+reason = "Shell bootstrap wrapper, checked by CI ShellCheck and executed by CLI integration tests; application logic is TypeScript."

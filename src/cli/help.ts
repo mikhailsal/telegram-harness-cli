@@ -1,8 +1,8 @@
 const descriptions: Record<string, [string, string, string]> = {
   init: [
-    "Initialize or update a bridge",
-    "thc init --token-file /secure/bot-token --user-id 123 --sandbox workspace-write --yes --no-start",
-    "thc init --update --no-start",
+    "Set up this project's bot, or resume its existing bridge",
+    "thc init",
+    "thc init --token-file /secure/bot-token --user-id 123 --sandbox workspace-write --no-start",
   ],
   start: [
     "Start the bridge in this folder",
@@ -56,7 +56,11 @@ export function help(command: string): string {
   const entry = descriptions[command];
   if (!entry)
     return 'Usage: thc <command> [options]\n\nCommands: init, start, stop, status, doctor, tail, render, search, around, day, explain, attach\n\nExamples:\n  thc status\n  thc search "deployment retries"';
-  return `Usage: thc ${command} [options]\n\n${entry[0]}\n\nExamples:\n  ${entry[1]}\n  ${entry[2]}`;
+  const options =
+    command === "init"
+      ? "\n\nInteractive: hidden bot token, owner ID, and explicit sandbox choice.\nReruns keep configuration and version; running agents are left running.\nOptions:\n  --token-file PATH   Use a private token file (mode 0600)\n  --user-id ID        Authorize this Telegram user\n  --sandbox MODE     read-only | workspace-write | danger-full-access\n  --no-start         Prepare without starting the service\n  --update           Select this CLI's package version explicitly\n  --to VERSION       Select an already installed compatible version\n  --force            Replace managed project instructions\n  --dir PATH         Set the target project directory"
+      : "";
+  return `Usage: thc ${command} [options]\n\n${entry[0]}\n\nExamples:\n  ${entry[1]}\n  ${entry[2]}${options}`;
 }
 export function isCommand(command: string): boolean {
   return command in descriptions;

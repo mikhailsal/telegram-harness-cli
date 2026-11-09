@@ -15,6 +15,7 @@ from quality.discovery import (
     affected_components,
     build_inventory,
 )
+from quality.discovery.filetypes import PROFILE_LANGUAGES
 from quality.engine.profiles import ProfileTests
 from quality.gitio import Candidate, FileChange, Repository, Snapshot, changed_lines, tree_changes
 from quality.policy import Category, Component, Policy, Profile, cross_validate, load_policy
@@ -127,7 +128,8 @@ class Scope:
         configs = tuple(
             record.path
             for record in owned
-            if record.category is Category.CONFIG and record.language is not None
+            if record.category is Category.CONFIG
+            and record.language in PROFILE_LANGUAGES[component.profile]
         )
         resources = tuple(
             record.path

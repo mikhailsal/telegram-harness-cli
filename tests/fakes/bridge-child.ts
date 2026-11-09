@@ -20,7 +20,7 @@ const root = process.env.THC_TEST_ROOT;
 const server = process.env.THC_TEST_SERVER;
 if (!root || !server) throw new Error("Missing test fixture configuration");
 const apiRoot = server;
-process.env.THC_SYNTHETIC_TOKEN = "123:synthetic";
+process.env.THC_SYNTHETIC_TOKEN = `${process.env.THC_TEST_BOT_ID ?? "123"}:synthetic`;
 if (process.env.THC_TEST_HOLD_INBOX === "1") {
   const inherited = Object.getPrototypeOf(
     Store.prototype,
