@@ -5,15 +5,15 @@ import { expect, it } from "vitest";
 
 const driver = String.raw`
 import json, os, pty, select, signal, sys, termios, time
-node, module, action = sys.argv[1:]
+node, module, action, mode = sys.argv[1:]
 program = '''
 const { prompt } = await import(process.argv[1]);
-try { await prompt("TOKEN: ", true); console.log("ACCEPTED"); }
+try { await prompt("TOKEN: ", process.argv[2] !== "visible"); console.log("ACCEPTED"); }
 catch { console.log("CANCELLED"); }
 '''
 pid, fd = pty.fork()
 if pid == 0:
-    os.execv(node, [node, '--input-type=module', '-e', program, module])
+    os.execv(node, [node, '--input-type=module', '-e', program, module, mode])
 data = b''
 sent = False
 status = None
@@ -39,7 +39,10 @@ print(json.dumps({'status': status, 'sent': sent, 'output': data.decode(errors='
                   'terminalRestored': (restored & (termios.ECHO | termios.ICANON)) == (termios.ECHO | termios.ICANON)}))
 `;
 
-function exercise(action: string): {
+function exercise(
+  action: string,
+  mode = "secret",
+): {
   status: number;
   sent: boolean;
   output: string;
@@ -48,7 +51,7 @@ function exercise(action: string): {
   const module = pathToFileURL(resolve("dist/cli/onboarding.js")).href;
   const child = spawnSync(
     "python3",
-    ["-c", driver, process.execPath, module, action],
+    ["-c", driver, process.execPath, module, action, mode],
     {
       encoding: "utf8",
       timeout: 15_000,
@@ -86,3 +89,14 @@ it.each(["interrupt", "eof"])(
     expect(result.output).toContain("CANCELLED");
   },
 );
+
+// Regression: ISSUE-001 — visible prompt labels were erased by readline
+// Found by /qa on 2026-11-15
+// Report: .gstack/qa-reports/qa-report-thc-init-2026-11-15.md
+it("keeps a visible prompt label on screen after readline redraws", () => {
+  const result = exercise("input", "visible");
+  expect(result).toMatchObject({ status: 0, sent: true });
+  const screen = result.output.split("\u001b[0J").at(-1) ?? "";
+  expect(screen).toContain("TOKEN: ");
+  expect(result.output).toContain("ACCEPTED");
+});

@@ -23,7 +23,9 @@ export async function prompt(
     : display;
   const rl = createInterface({ input, output, terminal: true });
   try {
-    display.write(label);
+    // A terminal readline redraws its line, erasing text written beside it;
+    // only the hidden prompt's discarded output needs the label written here.
+    if (secret) display.write(label);
     return await new Promise<string>((resolve, reject) => {
       let answered = false;
       rl.once("SIGINT", () => {
@@ -40,7 +42,7 @@ export async function prompt(
             ),
           );
       });
-      rl.question("", (value) => {
+      rl.question(secret ? "" : label, (value) => {
         answered = true;
         resolve(value.trim());
       });
