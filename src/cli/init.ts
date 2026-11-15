@@ -95,7 +95,12 @@ async function userIdInput(
     deps.stderr(
       "Send a private message to your bot; it will reply with your numeric user ID. Enter that ID here to authorize it.\n",
     );
-    return await requiredInput(undefined, "user-id", deps);
+    return await requiredInput(
+      undefined,
+      "user-id",
+      deps,
+      "Your Telegram user ID: ",
+    );
   } finally {
     controller.abort();
     await polling;
