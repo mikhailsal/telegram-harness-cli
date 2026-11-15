@@ -67,8 +67,10 @@ Node executable and records the setup invocation's PATH, with `~/.local/bin`
 added at the end when it is missing so the agent can run the managed `thc`;
 other shell environment variables are not copied into the service. Configure any custom
 Codex environment, such as a non-default `CODEX_HOME`, in the user service's
-environment before starting it. The token file must be a regular file with
-mode 0600.
+environment before starting it. `THC_TELEGRAM_API_ROOT` sends the Bot API
+calls of `init` and the bridge to another server, such as a local Bot API
+server or the fake one of the install test; the service does not inherit it
+either. The token file must be a regular file with mode 0600.
 
 The managed CLI is installed as `~/.local/bin/thc`. Add that directory to
 your shell's PATH, or use the absolute executable path. The executable keeps

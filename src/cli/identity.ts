@@ -1,11 +1,12 @@
 import { Bot } from "grammy";
+import { telegramApiOptions } from "../core/config.js";
 
 export type IdentityApi = Pick<Bot["api"], "getUpdates" | "sendMessage">;
 
 export async function respondWithPrivateIds(
   token: string,
   signal: AbortSignal,
-  api: IdentityApi = new Bot(token).api,
+  api: IdentityApi = new Bot(token, { client: telegramApiOptions() }).api,
 ): Promise<void> {
   let offset = 0;
   while (!signal.aborted) {
