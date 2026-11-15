@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { Writable } from "node:stream";
 import { Bot } from "grammy";
-import type { Config } from "../core/config.js";
+import { telegramApiOptions, type Config } from "../core/config.js";
 import type { CliDependencies } from "./context.js";
 import { CliError } from "./errors.js";
 
@@ -79,6 +79,14 @@ export async function requiredInput(
   return answer;
 }
 
+export function botIdentity(
+  token: string,
+): Promise<{ id: number; username?: string }> {
+  return new Bot(token, {
+    client: { timeoutSeconds: 15, ...telegramApiOptions() },
+  }).api.getMe();
+}
+
 export async function interactiveToken(
   directory: string,
   deps: CliDependencies,
@@ -87,8 +95,7 @@ export async function interactiveToken(
     getBot: (token: string) => Promise<{ id: number; username?: string }>;
   } = {
     readToken: () => prompt("Bot token (hidden): ", true),
-    getBot: (token) =>
-      new Bot(token, { client: { timeoutSeconds: 15 } }).api.getMe(),
+    getBot: botIdentity,
   },
 ): Promise<{ path: string; token: string }> {
   deps.stderr(

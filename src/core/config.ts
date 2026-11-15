@@ -141,6 +141,15 @@ export function codexHome(config: Config): string {
   );
 }
 
+// THC_TELEGRAM_API_ROOT points every Bot API call at another server, such as the
+// local fake of the install test; unset, grammY uses api.telegram.org.
+export function telegramApiOptions(env: NodeJS.ProcessEnv = process.env): {
+  apiRoot?: string;
+} {
+  const apiRoot = env.THC_TELEGRAM_API_ROOT;
+  return apiRoot ? { apiRoot } : {};
+}
+
 export function redact(value: string): string {
   return value
     .split(/(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)/g)

@@ -15,6 +15,7 @@ import {
   loadConfig,
   parseConfig,
   resolveToken,
+  telegramApiOptions,
   type Config,
 } from "./config.js";
 import type { RuntimeContext } from "./context.js";
@@ -296,8 +297,9 @@ async function runWithStore(
 export async function startBridge(
   directory: string,
   config?: Config,
-  options: RuntimeOptions = {},
+  given: RuntimeOptions = {},
 ): Promise<void> {
+  const options: RuntimeOptions = { ...telegramApiOptions(), ...given };
   const root = resolve(directory);
   const controller = new AbortController();
   const removeSignals = signals(controller, options.signal);

@@ -98,6 +98,15 @@ export class FakeServices {
       this.download(res);
       return;
     }
+    if (method === "getMe") {
+      this.ok(res, {
+        id: 123,
+        is_bot: true,
+        first_name: "Fake",
+        username: "thc_fake_bot",
+      });
+      return;
+    }
     if (method === "getFile") {
       this.ok(res, {
         file_id: "file-1",
