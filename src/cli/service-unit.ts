@@ -4,7 +4,9 @@ import { join } from "node:path";
 import type { CliDependencies } from "./context.js";
 import { CliError } from "./errors.js";
 
-function unitQuote(value: string): string {
+// Path settings such as WorkingDirectory= take the raw rest of the line: systemd
+// does not strip quotes there, so a quoted path is rejected as not absolute.
+function unitPathValue(value: string): string {
   if (/[\r\n\0]/.test(value))
     throw new CliError(
       "E_USAGE",
@@ -12,7 +14,11 @@ function unitQuote(value: string): string {
       "thc init --help",
       2,
     );
-  return `"${value.replace(/%/g, "%%").replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+  return value.replace(/%/g, "%%");
+}
+// Command lines and Environment= split on whitespace and honour quotes.
+function unitQuote(value: string): string {
+  return `"${unitPathValue(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 function unitName(directory: string): string {
   const id = createHash("sha256").update(directory).digest("hex").slice(0, 24);
@@ -69,7 +75,7 @@ export async function configureUnit(
     unitPath === undefined
       ? ""
       : `Environment=${unitQuote(`PATH=${unitPath}`)}\n`;
-  const text = `[Unit]\nDescription=Telegram harness bridge\nAfter=network-online.target\n\n[Service]\nType=simple\nWorkingDirectory=${unitQuote(directory)}\n${environment}ExecStart=${unitQuote(process.execPath)} ${unitQuote(executable)} start --dir ${unitQuote(directory)}\nRestart=on-failure\n\n[Install]\nWantedBy=default.target\n`;
+  const text = `[Unit]\nDescription=Telegram harness bridge\nAfter=network-online.target\n\n[Service]\nType=simple\nWorkingDirectory=${unitPathValue(directory)}\n${environment}ExecStart=${unitQuote(process.execPath)} ${unitQuote(executable)} start --dir ${unitQuote(directory)}\nRestart=on-failure\n\n[Install]\nWantedBy=default.target\n`;
   await writeFile(join(units, name), text, { mode: 0o600 });
   return name;
 }
