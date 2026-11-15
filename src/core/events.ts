@@ -14,6 +14,7 @@ import {
   markCompactionNotice,
 } from "./command-completions.js";
 import { isCompactionOnly, observeCompaction } from "./compaction.js";
+import { linkContinuation } from "./continuation.js";
 export { queueRequestSummaries } from "./request-summary.js";
 
 export function activeTurn(
@@ -47,6 +48,7 @@ export class AdapterEvents {
     }
     const turn = this.findTurn(event);
     if (!turn) return;
+    linkContinuation(this.ctx, turn, event);
     observeCompaction(this.ctx, turn, event);
     markCompactionNotice(this.ctx, turn, event);
     if (

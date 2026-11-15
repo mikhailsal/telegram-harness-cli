@@ -9,6 +9,7 @@ import type { RenderChunk } from "../channels/index.js";
 import type { Outbox, OutboxInput, Turn } from "../store/index.js";
 import type { RuntimeContext } from "./context.js";
 import { replyTarget } from "./reply-target.js";
+import { routingTurnId } from "./continuation.js";
 import { deliveryOptions } from "./delivery-options.js";
 import { messageFormat } from "./format.js";
 
@@ -155,7 +156,7 @@ export class Delivery {
   }
   private chatId(turnId: string): string {
     const message = this.context.store
-      .messagesForTurn(turnId)
+      .messagesForTurn(routingTurnId(this.context.store, turnId))
       .filter((row) => row.author === "user")
       .at(-1);
     return (

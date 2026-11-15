@@ -34,7 +34,12 @@ export function itemEvent(
   return undefined;
 }
 export function historyEvents(sessionId: string, turn: Turn): AdapterEvent[] {
-  const events = [event(sessionId, turn.id, "turn-started", "start")];
+  const started = event(sessionId, turn.id, "turn-started", "start");
+  // A turn Codex starts on behalf of an earlier one (for example after its
+  // daemon restarted) names the first turn of that chain.
+  if (turn.rootTurnId && turn.rootTurnId !== turn.id)
+    started.data = { rootTurnId: turn.rootTurnId };
+  const events = [started];
   for (const item of turn.items) {
     const normalized = itemEvent(sessionId, turn.id, item);
     if (normalized) events.push(normalized);

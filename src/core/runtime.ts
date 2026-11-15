@@ -1,9 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import {
   AttachmentManager,
   TelegramChannel,
@@ -23,6 +21,7 @@ import { Delivery } from "./delivery.js";
 import { DownNotice } from "./down-notice.js";
 import { TurnEngine } from "./engine.js";
 import { AlreadyRunningError, acquireDirectoryLock } from "./lock.js";
+import { startDaemon } from "./daemon-start.js";
 import { runtimeLog, type RuntimeLog } from "./log.js";
 import { registerMenus } from "./runtime-menu.js";
 import { pollLoop, maintenanceLoop } from "./runtime-poll.js";
@@ -46,7 +45,6 @@ export interface RuntimeOptions extends StartupOptions {
   startDaemon?: () => Promise<void>;
   tickIntervalMs?: number;
 }
-const execute = promisify(execFile);
 function noticeFor(directory: string, channel: TelegramChannel): DownNotice {
   return new DownNotice(directory, {
     send: async (chatId, text) => {
@@ -194,13 +192,14 @@ function daemonStarter(
   options: RuntimeOptions,
 ): () => Promise<void> {
   if (options.startDaemon) return options.startDaemon;
-  return async () => {
-    await execute(
-      ctx.config.codex.executable,
-      ["app-server", "daemon", "start"],
-      { cwd: ctx.directory, timeout: 30000, maxBuffer: 1024 * 1024 },
-    );
-  };
+  return () =>
+    startDaemon({
+      executable: ctx.config.codex.executable,
+      directory: ctx.directory,
+      env: process.env,
+      signal: ctx.signal,
+      log: ctx.log,
+    });
 }
 async function serve(
   ctx: RuntimeContext,

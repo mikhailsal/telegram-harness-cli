@@ -2,6 +2,7 @@ import { catalog } from "../channels/index.js";
 import type { AdapterEvent } from "../adapters/contract.js";
 import type { Turn } from "../store/index.js";
 import type { RuntimeContext } from "./context.js";
+import { continuedTurnId } from "./continuation.js";
 
 type Completion = "completed" | "failed" | "interrupted";
 export function completionStatus(event: AdapterEvent): Completion {
@@ -24,8 +25,12 @@ export function completionText(
   const text =
     event.text ?? ctx.store.getCursor(`turn-output/${turn.id}`) ?? "";
   const final =
-    status === "completed" ? text || strings.empty : strings[status];
-  return turn.source === "terminal"
+    status === "completed"
+      ? text || strings.empty
+      : status === "interrupted" && event.cursor.startsWith("lost/")
+        ? strings.interruptedRestart
+        : strings[status];
+  return turn.source === "terminal" && !continuedTurnId(ctx.store, turn)
     ? `${ctx.config.non_tg_marker} ${final}`
     : final;
 }

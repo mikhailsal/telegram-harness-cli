@@ -1,25 +1,32 @@
 import type { Store, Turn } from "../store/index.js";
 
+function sameTurn(candidate: Turn, anchor: Turn): boolean {
+  if (candidate.id === anchor.id) return true;
+  if (!anchor.externalTurnId) return false;
+  return (
+    candidate.entityId === anchor.entityId &&
+    candidate.sessionId === anchor.sessionId &&
+    candidate.externalTurnId === anchor.externalTurnId
+  );
+}
+// A turn's peers share its harness turn ID (accepted steers). A continuation
+// also inherits the peers of the Telegram turn it continues.
 function relatedTurns(store: Store, turn: Turn): Turn[] {
-  return store
-    .listTurns([
-      "active",
-      "submitting",
-      "uncertain",
-      "completed",
-      "failed",
-      "cancelled",
-      "interrupted",
-    ])
-    .filter((candidate) => {
-      if (candidate.id === turn.id) return true;
-      if (!turn.externalTurnId) return false;
-      return (
-        candidate.entityId === turn.entityId &&
-        candidate.sessionId === turn.sessionId &&
-        candidate.externalTurnId === turn.externalTurnId
-      );
-    });
+  const turns = store.listTurns([
+    "active",
+    "submitting",
+    "uncertain",
+    "completed",
+    "failed",
+    "cancelled",
+    "interrupted",
+  ]);
+  const continued = store.getCursor(`continues/${turn.id}`);
+  const root = turns.find((candidate) => candidate.id === continued);
+  const anchors = root ? [turn, root] : [turn];
+  return turns.filter((candidate) =>
+    anchors.some((anchor) => sameTurn(candidate, anchor)),
+  );
 }
 export function replySourceMessageId(
   store: Store,

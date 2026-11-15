@@ -20,7 +20,12 @@ export const itemSchema = z
   })
   .loose();
 export const turnSchema = z
-  .object({ id: z.string(), status: z.string(), items: z.array(itemSchema) })
+  .object({
+    id: z.string(),
+    status: z.string(),
+    items: z.array(itemSchema),
+    rootTurnId: z.string().nullish(),
+  })
   .loose();
 export const turnList = z
   .object({ data: z.array(turnSchema), nextCursor: z.string().nullish() })
