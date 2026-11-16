@@ -117,4 +117,5 @@ bot and the phone checklist are still required to verify Telegram's actual
 rendering and buttons.
 
 All project and imported tooling documentation is listed in the
-[documentation index](docs/README.md).
+[documentation index](docs/README.md). Release notes are in the
+[changelog](CHANGELOG.md).
