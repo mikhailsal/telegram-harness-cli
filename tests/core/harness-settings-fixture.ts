@@ -180,6 +180,28 @@ function views(
   };
 }
 
+// An active Telegram turn Codex knows as externalId, with the model its
+// submit recorded ("none" when nothing was sent).
+export function telegramTurn(store: Store, externalId: string, sent?: string) {
+  const id = `tg-${externalId}`;
+  if (store.listTurns(["active"]).some((turn) => turn.id === id)) return;
+  store.createTurn({
+    id,
+    entityId: "entity",
+    source: "telegram",
+    createdAt: "2026-11-16T00:00:00Z",
+  });
+  store.transitionTurn(id, "queued", "active", {
+    sessionId: "session",
+    externalTurnId: externalId,
+  });
+  if (sent !== undefined)
+    store.setCursor(
+      `turn-execution/${id}/submit`,
+      JSON.stringify({ model: sent }),
+    );
+}
+
 export function command(
   name: "model" | "effort" | "status" | "new",
   args = "",

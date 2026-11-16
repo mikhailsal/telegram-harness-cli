@@ -12,6 +12,7 @@ import {
   command,
   decision,
   settingsFixture,
+  telegramTurn,
 } from "./harness-settings-fixture.js";
 
 type Fixture = ReturnType<typeof settingsFixture>;
@@ -37,6 +38,7 @@ const notFound: AdapterEvent = {
   data: { code: "modelNotFound" },
 };
 async function notify(f: Fixture) {
+  telegramTurn(f.store, "turn-7");
   await new AdapterEvents(f.ctx, { finish: () => false }).apply(notFound);
   await settingsIdle(f.ctx);
 }
@@ -70,7 +72,7 @@ it("turns the recover button stale once the owner changes the model by hand", as
 it("holds the model the failing turn was sent with, not a newer choice", async () => {
   const f = settingsFixture();
   f.store.setCursor("chat-id", "1");
-  f.store.setCursor("harness-settings/sent", JSON.stringify({ model: "old" }));
+  telegramTurn(f.store, "turn-7", "old");
   applySetting(f.ctx, audit, "harness", { model: "beta" });
   await notify(f);
   expect(f.store.getCursor("settings-blocked")).toBe("old");
@@ -85,6 +87,7 @@ it("does not hold the queue when the notice cannot reach the owner", async () =>
   expect(settingsHeld(f.ctx)).toBe(false);
   f.store.setCursor("chat-id", "1");
   f.sendMessage.mockRejectedValueOnce(new Error("403"));
+  telegramTurn(f.store, "turn-8");
   await new AdapterEvents(f.ctx, { finish: () => false }).apply({
     ...notFound,
     turnId: "turn-8",
@@ -144,8 +147,32 @@ it("treats unreadable recover and sent cursors as absent", async () => {
     f.answerCallback.mock.calls.map((call) => String(call[1] as unknown)),
   ).toEqual(["Already resolved", "Already resolved"]);
   f.store.setCursor("chat-id", "1");
-  f.store.setCursor("harness-settings/sent", "{");
+  f.store.setCursor("turn-execution/tg-turn-7/submit", "{");
   applySetting(f.ctx, audit, "harness", { model: "beta" });
   await notify(f);
   expect(f.store.getCursor("settings-blocked")).toBeUndefined();
+});
+
+it("leaves Telegram's queue alone when a TUI turn hits an unknown model", async () => {
+  const f = settingsFixture();
+  f.store.setCursor("chat-id", "1");
+  applySetting(f.ctx, audit, "harness", { model: "beta" });
+  await new AdapterEvents(f.ctx, { finish: () => false }).apply(notFound);
+  await settingsIdle(f.ctx);
+  expect(f.store.getCursor("settings-blocked")).toBeUndefined();
+  expect(f.texts()).toHaveLength(0);
+  expect(f.log).toHaveBeenCalledWith("settings.model-unavailable", {
+    model: "unknown",
+    source: "tui",
+  });
+});
+
+it("holds nothing when the failing turn sent no model of its own", async () => {
+  const f = settingsFixture();
+  f.store.setCursor("chat-id", "1");
+  telegramTurn(f.store, "turn-7", "none");
+  applySetting(f.ctx, audit, "harness", { model: "beta" });
+  await notify(f);
+  expect(f.store.getCursor("settings-blocked")).toBeUndefined();
+  expect(f.texts()[0]).toContain("alpha is not available");
 });

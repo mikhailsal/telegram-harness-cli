@@ -11,6 +11,7 @@ import {
   command,
   decision,
   settingsFixture,
+  telegramTurn,
 } from "./harness-settings-fixture.js";
 
 type Fixture = ReturnType<typeof settingsFixture>;
@@ -158,6 +159,7 @@ const notFound = (turnId = "turn-7"): AdapterEvent => ({
   data: { code: "modelNotFound" },
 });
 async function notify(f: Fixture, event: AdapterEvent) {
+  if (event.turnId) telegramTurn(f.store, event.turnId);
   await new AdapterEvents(f.ctx, { finish: () => false }).apply(event);
   await settingsIdle(f.ctx);
 }

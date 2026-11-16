@@ -2,6 +2,7 @@ import type { AdapterEvent, HarnessSettings } from "../adapters/contract.js";
 import { fill } from "../channels/index.js";
 import type { Language } from "../channels/index.js";
 import type { RuntimeContext } from "./context.js";
+import type { Turn } from "../store/index.js";
 import { desiredSettings } from "./settings-audit.js";
 import { defaultModel, effortLabel } from "./harness-settings-model.js";
 import type { SettingsState } from "./harness-settings-model.js";
@@ -28,7 +29,14 @@ export function noticeModelUnavailable(
   const key = `settings-notice/${event.turnId}`;
   if (ctx.store.getCursor(key)) return;
   ctx.store.setCursor(key, "1");
-  const failed = rejectedModel(ctx);
+  const turn = telegramTurn(ctx, event.turnId);
+  // A TUI turn failed: the owner sees it there, and Telegram's own override
+  // may well be valid, so Telegram's queue is not held.
+  if (!turn) {
+    ctx.log("settings.model-unavailable", { model: "unknown", source: "tui" });
+    return;
+  }
+  const failed = rejectedModel(ctx, turn.id);
   ctx.log("settings.model-unavailable", { model: failed ?? "unknown" });
   const chatId = ctx.store.getCursor("chat-id");
   // Without a chat to explain it in, holding the queue would stall it silently.
@@ -43,13 +51,34 @@ export function noticeModelUnavailable(
   );
 }
 
-// The model the failing turn was sent with; desired may have moved on since.
-function rejectedModel(ctx: RuntimeContext): string | undefined {
-  const sent = ctx.store.getCursor(sentCursor);
-  if (sent === undefined) return desiredSettings(ctx)?.model;
+// The Telegram turn Codex reported on, if Telegram submitted it.
+function telegramTurn(
+  ctx: RuntimeContext,
+  externalTurnId: string,
+): Turn | undefined {
+  return ctx.store
+    .listTurns(["submitting", "active", "uncertain", "completed", "failed"])
+    .find(
+      (turn) =>
+        turn.entityId === ctx.entityId &&
+        turn.source === "telegram" &&
+        turn.externalTurnId === externalTurnId,
+    );
+}
+
+// The model that turn was sent with, from its execution record; desired may
+// have moved on since. "none" means the thread's own model was rejected.
+function rejectedModel(
+  ctx: RuntimeContext,
+  turnId: string,
+): string | undefined {
+  const record = ctx.store.getCursor(`turn-execution/${turnId}/submit`);
+  if (record === undefined) return desiredSettings(ctx)?.model;
   try {
-    const parsed = JSON.parse(sent) as { model?: unknown };
-    return typeof parsed.model === "string" ? parsed.model : undefined;
+    const parsed = JSON.parse(record) as { model?: unknown };
+    return typeof parsed.model === "string" && parsed.model !== "none"
+      ? parsed.model
+      : undefined;
   } catch {
     return undefined;
   }
