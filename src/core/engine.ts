@@ -8,6 +8,7 @@ import { confirmDeferredNew } from "./command-completions.js";
 import { TurnStatuses } from "./status.js";
 import { turnDraftId } from "./turn-draft.js";
 import { steerTurn, submitTurn } from "./engine-submit.js";
+import { settingsHeld } from "./harness-settings-runner.js";
 import type { CommandDelivery } from "./commands.js";
 import { AdapterEvents, activeTurn, queueRequestSummaries } from "./events.js";
 import { recordReaction } from "./interactions.js";
@@ -51,6 +52,12 @@ export class TurnEngine {
     this.ctx = context;
     this.statuses = new TurnStatuses(context);
     this.delivery = delivery;
+    delivery.serialize = (action) =>
+      this.serial(async () => {
+        await action();
+        await this.pump();
+        this.statuses.refresh();
+      });
     this.commands = new Commands(context, delivery);
     this.events = new AdapterEvents(context, delivery);
     delivery.onSending = (turnId) => this.statuses.pause(turnId);
@@ -273,7 +280,7 @@ export class TurnEngine {
     if (this.ctx.store.getCursor("stop-pending") === "1")
       this.ctx.store.setCursor("stop-pending", "0");
     await confirmDeferredNew(this.ctx);
-    const turn = nextQueuedTurn(this.ctx);
+    const turn = settingsHeld(this.ctx) ? undefined : nextQueuedTurn(this.ctx);
     if (turn) {
       await submitTurn(this.ctx, this.statuses, turn);
       const started = activeTurn(this.ctx);

@@ -10,7 +10,13 @@ import { CompactRejectedError } from "../adapters/contract.js";
 import { decideFormat, showFormat } from "./format-command.js";
 import { saveCompletion } from "./command-completions.js";
 import { applySetting, effectiveSettings } from "./settings-audit.js";
+import type { Serialize } from "./harness-settings-runner.js";
+import { later, readRunning, releaseHold } from "./harness-settings-runner.js";
+import { runSettingsCommand } from "./harness-settings-command.js";
+import { decideRecover, decideSettingsCard } from "./harness-settings-cards.js";
+import { settingsStatusLines } from "./harness-settings-notice.js";
 export interface CommandDelivery {
+  serialize?: Serialize | undefined;
   finish(
     turn: Turn,
     status: "completed" | "failed" | "cancelled" | "interrupted",
@@ -49,10 +55,7 @@ export class Commands {
       await this.compact(event);
       return;
     }
-    if (event.command === "format") {
-      await showFormat(this.ctx, event);
-      return;
-    }
+    if (await this.settingsCommand(event)) return;
     if (event.command === "start") {
       await this.ctx.transient.send(
         transientIntent(
@@ -66,12 +69,20 @@ export class Commands {
       return;
     }
     if (event.command === "status") {
-      await this.status(event, active);
+      await this.status(event);
       return;
     }
     if (event.command === "help") await this.reply(event, strings.welcome);
   }
+  private async settingsCommand(event: Command): Promise<boolean> {
+    if (event.command === "format") await showFormat(this.ctx, event);
+    else if (["model", "effort"].includes(event.command))
+      await runSettingsCommand(this.ctx, this.delivery.serialize, event);
+    else return false;
+    return true;
+  }
   private async newSession(event: Command, active: Turn[]): Promise<void> {
+    releaseHold(this.ctx);
     if (active.length || !this.ctx.adapterReady) {
       saveCompletion(this.ctx, "deferred-new-command", event);
       this.ctx.store.setCursor("deferred-new", "1");
@@ -107,8 +118,39 @@ export class Commands {
       );
     }
   }
-  private async status(event: Command, active: Turn[]): Promise<void> {
+  // With a configurable adapter the model lines need a thread/read, which
+  // runs outside the engine queue like every settings read.
+  private async status(event: Command): Promise<void> {
+    const adapter = this.ctx.adapter;
+    const configurable = adapter.capabilities.has("configure");
+    if (!configurable || !this.ctx.adapterReady) {
+      await this.statusReply(event, configurable, undefined);
+      return;
+    }
+    later(
+      this.ctx,
+      this.delivery.serialize,
+      (signal) => readRunning(this.ctx, signal),
+      async (outcome) => {
+        await this.statusReply(
+          event,
+          true,
+          outcome.ok ? outcome.value : undefined,
+        );
+      },
+    );
+  }
+  private async statusReply(
+    event: Command,
+    configurable: boolean,
+    running: Parameters<typeof settingsStatusLines>[2],
+  ): Promise<void> {
     const strings = catalog[event.language];
+    const active = this.ctx.store.listTurns([
+      "submitting",
+      "active",
+      "uncertain",
+    ]);
     const mode = effectiveSettings(this.ctx, event.chatId).mode;
     const modeLabel =
       mode === "steer" ? strings.chooseSteer : strings.chooseQueue;
@@ -120,6 +162,9 @@ export class Commands {
         `${strings.statusFolder}: ${this.ctx.directory}`,
         `${strings.statusHarness}: ${this.ctx.config.codex.adapter}`,
         `${strings.statusMode}: ${modeLabel}`,
+        ...(configurable
+          ? settingsStatusLines(this.ctx, event.language, running)
+          : []),
         active.length ? strings.working : strings.idle,
         session?.startedAt ?? "",
         update
@@ -202,6 +247,10 @@ export class Commands {
     event: Extract<ChannelEvent, { kind: "decision" }>,
   ): Promise<boolean> {
     if (await decideFormat(this.ctx, event)) return true;
+    if (await decideSettingsCard(this.ctx, this.delivery.serialize, event))
+      return true;
+    if (await decideRecover(this.ctx, this.delivery.serialize, event))
+      return true;
     const match = /^mode:(queue|steer)$/u.exec(event.data);
     if (!match?.[1]) return false;
     const card = this.ctx.store

@@ -1,23 +1,72 @@
+import { z } from "zod";
 import type { ChannelEvent } from "../channels/index.js";
 import type { Turn } from "../store/index.js";
 import type { RuntimeContext } from "./context.js";
 import { chatMessageFormat, messageFormat, turnChatId } from "./format.js";
 
 type Event = Pick<ChannelEvent, "updateId" | "chatId" | "userId" | "sentAt">;
-type Setting = "mode" | "format";
-type Value = "queue" | "steer" | "rich" | "regular";
+export const desiredCursor = "harness-settings/desired";
+const desiredSchema = z
+  .object({
+    model: z.string().min(1).optional(),
+    effort: z.string().min(1).optional(),
+  })
+  .strict();
+export interface DesiredSettings {
+  model?: string;
+  effort?: string;
+}
+function clean(value: z.infer<typeof desiredSchema>): DesiredSettings {
+  return {
+    ...(value.model ? { model: value.model } : {}),
+    ...(value.effort ? { effort: value.effort } : {}),
+  };
+}
+interface Values {
+  mode: "queue" | "steer";
+  format: "rich" | "regular";
+  harness: DesiredSettings;
+}
+type Setting = keyof Values;
+function oneOf(value: unknown, allowed: readonly string[]): string {
+  if (typeof value !== "string" || !allowed.includes(value))
+    throw new Error("Invalid setting value");
+  return value;
+}
+// One validator and one cursor per setting; the stored value is a string.
+const settings: Record<
+  Setting,
+  {
+    cursor: (chatId: string) => string;
+    encode: (value: unknown) => string;
+  }
+> = {
+  mode: {
+    cursor: () => "followup-mode",
+    encode: (value) => oneOf(value, ["queue", "steer"]),
+  },
+  format: {
+    cursor: (chatId) => `message-format/${chatId}`,
+    encode: (value) => oneOf(value, ["rich", "regular"]),
+  },
+  harness: {
+    cursor: () => desiredCursor,
+    encode: (value) => {
+      const parsed = desiredSchema.safeParse(value);
+      if (!parsed.success) throw new Error("Invalid setting value");
+      return JSON.stringify(clean(parsed.data));
+    },
+  },
+};
 
-export function applySetting(
+export function applySetting<K extends Setting>(
   ctx: RuntimeContext,
   event: Event,
-  setting: Setting,
-  value: Value,
+  setting: K,
+  value: Values[K],
 ): boolean {
-  if (
-    (setting === "mode" && value !== "queue" && value !== "steer") ||
-    (setting === "format" && value !== "rich" && value !== "regular")
-  )
-    throw new Error("Invalid setting value");
+  const entry = settings[setting];
+  const stored = entry.encode(value);
   const audit = {
     updateId: event.updateId,
     chatId: event.chatId,
@@ -27,16 +76,37 @@ export function applySetting(
     setting,
     value,
   };
-  const cursor =
-    setting === "mode" ? "followup-mode" : `message-format/${event.chatId}`;
   const applied = ctx.store.applySetting(
     event.updateId,
-    cursor,
-    value,
+    entry.cursor(event.chatId),
+    stored,
     JSON.stringify(audit),
   );
   if (applied) ctx.log("setting.applied", audit);
   return applied;
+}
+
+// The one reader of the desired harness settings: absent, `{}` and invalid
+// values all mean "no Telegram override".
+export function desiredSettings(
+  ctx: RuntimeContext,
+): DesiredSettings | undefined {
+  const raw = ctx.store.getCursor(desiredCursor);
+  if (!raw) return undefined;
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    value = undefined;
+  }
+  const parsed = desiredSchema.safeParse(value);
+  if (!parsed.success) {
+    ctx.log("settings.desired-invalid");
+    return undefined;
+  }
+  return parsed.data.model || parsed.data.effort
+    ? clean(parsed.data)
+    : undefined;
 }
 
 export function effectiveSettings(
@@ -57,6 +127,7 @@ export function recordExecution(
   ctx: RuntimeContext,
   turn: Turn,
   action: "submit" | "steer",
+  sent?: DesiredSettings,
 ): void {
   const chatId = turnChatId(ctx, turn);
   const key = `turn-execution/${turn.id}/${action}`;
@@ -69,6 +140,8 @@ export function recordExecution(
     mode: effectiveSettings(ctx, chatId).mode,
     format: messageFormat(ctx, turn, chatId),
     adapter: ctx.config.codex.adapter,
+    model: sent?.model ?? "none",
+    effort: sent?.effort ?? "none",
     at: ctx.now().toISOString(),
   };
   ctx.store.setCursor(key, JSON.stringify(details));

@@ -1,5 +1,7 @@
 export type * from "./types.js";
 export { catalog } from "./catalog.js";
+export { fill, settingsCatalog } from "./settings-catalog.js";
+export type { SettingsText } from "./settings-catalog.js";
 export { entitiesToMarkdown } from "./ingress.js";
 export { renderOutgoing } from "./render.js";
 export type { RenderChunk, RenderResult } from "./render.js";

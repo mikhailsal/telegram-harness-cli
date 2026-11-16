@@ -3,7 +3,8 @@ import type { Turn } from "../store/index.js";
 import type { RuntimeContext } from "./context.js";
 import type { TurnStatuses } from "./status.js";
 import { messageFormat } from "./format.js";
-import { recordExecution } from "./settings-audit.js";
+import { desiredSettings, recordExecution } from "./settings-audit.js";
+import { sentCursor } from "./harness-settings-notice.js";
 import { acceptReaction, trackReaction } from "./interactions.js";
 import { consumeTurnInbox, nextQueuedTurn, turnText } from "./queue.js";
 
@@ -61,6 +62,10 @@ export async function submitTurn(
   statuses: TurnStatuses,
   turn: Turn,
 ): Promise<void> {
+  // One snapshot per turn: what is sent is what the audit records.
+  const settings = ctx.adapter.capabilities.has("configure")
+    ? desiredSettings(ctx)
+    : undefined;
   messageFormat(ctx, turn);
   trackReaction(ctx, turn.id);
   const text = await turnText(ctx, turn);
@@ -75,8 +80,13 @@ export async function submitTurn(
   ctx.persistAdapter();
   statuses.refresh();
   try {
-    recordExecution(ctx, turn, "submit");
-    const result = await ctx.adapter.submit({ correlationId: turn.id, text });
+    recordExecution(ctx, turn, "submit", settings);
+    ctx.store.setCursor(sentCursor, JSON.stringify(settings ?? {}));
+    const result = await ctx.adapter.submit({
+      correlationId: turn.id,
+      text,
+      ...(settings ? { settings } : {}),
+    });
     ctx.persistAdapter();
     if (result.turnId)
       ctx.store.transitionTurn(turn.id, "submitting", "active", {

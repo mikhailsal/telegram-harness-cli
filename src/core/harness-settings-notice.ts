@@ -1,0 +1,113 @@
+import type { AdapterEvent, HarnessSettings } from "../adapters/contract.js";
+import { fill } from "../channels/index.js";
+import type { Language } from "../channels/index.js";
+import type { RuntimeContext } from "./context.js";
+import { desiredSettings } from "./settings-audit.js";
+import { defaultModel, effortLabel } from "./harness-settings-model.js";
+import type { SettingsState } from "./harness-settings-model.js";
+import { holdCursor, later, readState } from "./harness-settings-runner.js";
+import type { Outcome, Serialize } from "./harness-settings-runner.js";
+import { recoverKey } from "./harness-settings-cards.js";
+
+// Codex rejected the model of a turn: hold the queue while that model is
+// still desired and offer one tap back to Codex's default. Settings change
+// only when the owner taps.
+export function noticeModelUnavailable(
+  ctx: RuntimeContext,
+  serialize: Serialize | undefined,
+  event: AdapterEvent,
+): void {
+  const code = (event.data as { code?: unknown } | undefined)?.code;
+  if (code !== "modelNotFound" || !event.turnId) return;
+  const key = `settings-notice/${event.turnId}`;
+  if (ctx.store.getCursor(key)) return;
+  ctx.store.setCursor(key, "1");
+  const failed = desiredSettings(ctx)?.model;
+  ctx.log("settings.model-unavailable", { model: failed ?? "unknown" });
+  if (failed) ctx.store.setCursor(holdCursor, failed);
+  const chatId = ctx.store.getCursor("chat-id");
+  if (!chatId) return;
+  const language = ctx.store.getCursor("language") === "ru" ? "ru" : "en";
+  later(
+    ctx,
+    serialize,
+    (signal) => readState(ctx, signal),
+    (outcome) => sendNotice(ctx, { chatId, language, failed }, outcome),
+  );
+}
+
+async function sendNotice(
+  ctx: RuntimeContext,
+  target: { chatId: string; language: Language; failed: string | undefined },
+  outcome: Outcome<SettingsState>,
+): Promise<void> {
+  const state = outcome.ok ? outcome.value : undefined;
+  const model = target.failed ?? state?.running?.model ?? "?";
+  const fallback = state ? defaultModel(state) : undefined;
+  const usable =
+    fallback && fallback.id !== target.failed ? fallback : undefined;
+  const text = usable
+    ? fill(target.language, "modelUnavailable", { model, default: usable.id })
+    : fill(target.language, "modelUnavailableManual", { model });
+  const message = await ctx.channel.bot.api.sendMessage(target.chatId, text, {
+    ...(usable
+      ? {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: fill(target.language, "recoverButton", {
+                    default: usable.id,
+                  }),
+                  callback_data: "recover",
+                },
+              ],
+            ],
+          },
+        }
+      : {}),
+  });
+  if (usable)
+    ctx.store.setCursor(recoverKey(target.chatId, message.message_id), "1");
+}
+
+const described = (language: Language, settings: HarnessSettings) =>
+  [settings.model, settings.effort && `effort ${settings.effort}`]
+    .filter(Boolean)
+    .join(" · ") || effortLabel(language, undefined);
+
+// The model lines of /status: what runs now, what Telegram sets for the next
+// turns, and why they differ.
+export function settingsStatusLines(
+  ctx: RuntimeContext,
+  language: Language,
+  running: HarnessSettings | undefined,
+): string[] {
+  const lines = [
+    running?.model
+      ? fill(language, "statusRunning", {
+          model: running.model,
+          effort: effortLabel(language, running.effort),
+        })
+      : fill(language, "statusRunningUnknown"),
+  ];
+  const desired = desiredSettings(ctx);
+  if (!desired) return [...lines, fill(language, "statusNoOverride")];
+  lines.push(
+    fill(language, "statusNext", { settings: described(language, desired) }),
+  );
+  const differs =
+    running?.model !== undefined &&
+    ((desired.model !== undefined && desired.model !== running.model) ||
+      (desired.effort !== undefined && desired.effort !== running.effort));
+  if (!differs) return lines;
+  const sent = ctx.store.getCursor(sentCursor);
+  lines.push(
+    fill(
+      language,
+      sent === JSON.stringify(desired) ? "statusDiffers" : "statusPending",
+    ),
+  );
+  return lines;
+}
+export const sentCursor = "harness-settings/sent";
