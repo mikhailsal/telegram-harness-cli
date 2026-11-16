@@ -108,9 +108,11 @@ async function refresh(
   note: "settingsChanged" | "settingsGone",
 ): Promise<void> {
   const header = fill(event.language, note, { id: pick.id });
+  const current =
+    state.desired?.model ?? state.running?.model ?? pick.snapshot.model;
   const model =
     pick.snapshot.kind === "effort"
-      ? state.models.find((item) => item.id === pick.snapshot.model)
+      ? state.models.find((item) => item.id === current)
       : undefined;
   const card = model
     ? effortCard(event.language, state, model)
@@ -158,6 +160,12 @@ async function pickEffort(
   pick: Pick,
 ): Promise<void> {
   const model = state.models.find((item) => item.id === pick.snapshot.model);
+  const current = state.desired?.model ?? state.running?.model;
+  if (current !== undefined && current !== pick.snapshot.model) {
+    // The card offers another model's efforts; /model ran since it was shown.
+    await refresh(ctx, event, state, pick, "settingsChanged");
+    return;
+  }
   if (!model || !supports(model, pick.id)) {
     await refresh(ctx, event, state, pick, "settingsGone");
     return;
@@ -178,7 +186,9 @@ export async function decideRecover(
 ): Promise<boolean> {
   if (event.data !== "recover") return false;
   const key = recoverKey(event.chatId, event.messageId);
-  if (!ctx.store.getCursor(key)) {
+  const version = recoverVersion(ctx.store.getCursor(key));
+  // Stale once used, or once the setting changed after the notice was sent.
+  if (version === undefined || version !== desiredVersion(ctx)) {
     await ctx.channel.answerCallback(
       event.callbackId,
       catalog[event.language].stale,
@@ -193,6 +203,10 @@ export async function decideRecover(
     serialize,
     (signal) => readState(ctx, signal),
     async (outcome) => {
+      if (desiredVersion(ctx) !== version) {
+        await sendText(ctx, event, catalog[event.language].stale);
+        return;
+      }
       const model = outcome.ok ? defaultModel(outcome.value) : undefined;
       if (!outcome.ok || !model) {
         const text = outcome.ok
@@ -216,3 +230,15 @@ export async function decideRecover(
 
 export const recoverKey = (chatId: string, messageId: number) =>
   `settings-recover/${chatId}/${String(messageId)}`;
+
+// A live recover button stores the desired version it was offered against.
+export const recoverValue = (version: string) => JSON.stringify({ version });
+function recoverVersion(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as { version?: unknown };
+    return typeof parsed.version === "string" ? parsed.version : undefined;
+  } catch {
+    return undefined;
+  }
+}

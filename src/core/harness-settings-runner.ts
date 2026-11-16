@@ -37,7 +37,10 @@ export function later<T>(
         ctx.log("settings.commit-failed");
       }
     };
-    await (serialize ? serialize(run) : run());
+    // serialize also pumps the queue afterwards, which can throw on its own.
+    await (serialize ? serialize(run) : run()).catch(() => {
+      ctx.log("settings.pump-failed");
+    });
   })();
   const tasks = running.get(ctx) ?? new Set();
   running.set(ctx, tasks);

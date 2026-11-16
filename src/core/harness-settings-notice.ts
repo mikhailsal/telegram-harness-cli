@@ -5,9 +5,15 @@ import type { RuntimeContext } from "./context.js";
 import { desiredSettings } from "./settings-audit.js";
 import { defaultModel, effortLabel } from "./harness-settings-model.js";
 import type { SettingsState } from "./harness-settings-model.js";
-import { holdCursor, later, readState } from "./harness-settings-runner.js";
+import {
+  desiredVersion,
+  holdCursor,
+  later,
+  readState,
+  releaseHold,
+} from "./harness-settings-runner.js";
 import type { Outcome, Serialize } from "./harness-settings-runner.js";
-import { recoverKey } from "./harness-settings-cards.js";
+import { recoverKey, recoverValue } from "./harness-settings-cards.js";
 
 // Codex rejected the model of a turn: hold the queue while that model is
 // still desired and offer one tap back to Codex's default. Settings change
@@ -22,11 +28,12 @@ export function noticeModelUnavailable(
   const key = `settings-notice/${event.turnId}`;
   if (ctx.store.getCursor(key)) return;
   ctx.store.setCursor(key, "1");
-  const failed = desiredSettings(ctx)?.model;
+  const failed = rejectedModel(ctx);
   ctx.log("settings.model-unavailable", { model: failed ?? "unknown" });
-  if (failed) ctx.store.setCursor(holdCursor, failed);
   const chatId = ctx.store.getCursor("chat-id");
+  // Without a chat to explain it in, holding the queue would stall it silently.
   if (!chatId) return;
+  if (failed) ctx.store.setCursor(holdCursor, failed);
   const language = ctx.store.getCursor("language") === "ru" ? "ru" : "en";
   later(
     ctx,
@@ -34,6 +41,18 @@ export function noticeModelUnavailable(
     (signal) => readState(ctx, signal),
     (outcome) => sendNotice(ctx, { chatId, language, failed }, outcome),
   );
+}
+
+// The model the failing turn was sent with; desired may have moved on since.
+function rejectedModel(ctx: RuntimeContext): string | undefined {
+  const sent = ctx.store.getCursor(sentCursor);
+  if (sent === undefined) return desiredSettings(ctx)?.model;
+  try {
+    const parsed = JSON.parse(sent) as { model?: unknown };
+    return typeof parsed.model === "string" ? parsed.model : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function sendNotice(
@@ -49,26 +68,35 @@ async function sendNotice(
   const text = usable
     ? fill(target.language, "modelUnavailable", { model, default: usable.id })
     : fill(target.language, "modelUnavailableManual", { model });
-  const message = await ctx.channel.bot.api.sendMessage(target.chatId, text, {
-    ...(usable
-      ? {
-          reply_markup: {
-            inline_keyboard: [
-              [
-                {
-                  text: fill(target.language, "recoverButton", {
-                    default: usable.id,
-                  }),
-                  callback_data: "recover",
-                },
+  const message = await ctx.channel.bot.api
+    .sendMessage(target.chatId, text, {
+      ...(usable
+        ? {
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: fill(target.language, "recoverButton", {
+                      default: usable.id,
+                    }),
+                    callback_data: "recover",
+                  },
+                ],
               ],
-            ],
-          },
-        }
-      : {}),
-  });
+            },
+          }
+        : {}),
+    })
+    .catch((error: unknown) => {
+      // No notice reached the owner, so nothing would ever lift the hold.
+      releaseHold(ctx);
+      throw error;
+    });
   if (usable)
-    ctx.store.setCursor(recoverKey(target.chatId, message.message_id), "1");
+    ctx.store.setCursor(
+      recoverKey(target.chatId, message.message_id),
+      recoverValue(desiredVersion(ctx)),
+    );
 }
 
 const described = (language: Language, settings: HarnessSettings) =>
