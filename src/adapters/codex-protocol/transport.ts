@@ -80,7 +80,13 @@ export class ProtocolTransport {
     });
     this.send({ method: "initialized", params: {} });
   }
-  async call(method: string, params: unknown): Promise<unknown> {
+  // A signal makes the call abortable: abort rejects it and drops the pending
+  // entry but keeps the socket, so a slow read never costs the connection.
+  async call(
+    method: string,
+    params: unknown,
+    signal?: AbortSignal,
+  ): Promise<unknown> {
     const id = String(++this.sequence);
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -88,7 +94,18 @@ export class ProtocolTransport {
         reject(new Error("Protocol request timed out; outcome may be unknown"));
         this.socket?.terminate();
       }, 30_000);
-      this.pending.set(id, { resolve, reject, timer });
+      const settle = this.abortable(id, timer, reject, signal);
+      this.pending.set(id, {
+        resolve: (value) => {
+          settle();
+          resolve(value);
+        },
+        reject: (reason) => {
+          settle();
+          reject(reason);
+        },
+        timer,
+      });
       try {
         this.send({ id, method, params });
       } catch (error) {
@@ -97,6 +114,24 @@ export class ProtocolTransport {
         reject(error instanceof Error ? error : new Error(String(error)));
       }
     });
+  }
+  private abortable(
+    id: string,
+    timer: NodeJS.Timeout,
+    reject: (reason: Error) => void,
+    signal: AbortSignal | undefined,
+  ): () => void {
+    if (!signal) return () => undefined;
+    const abort = () => {
+      clearTimeout(timer);
+      if (this.pending.delete(id))
+        reject(new Error("Protocol request aborted"));
+    };
+    if (signal.aborted) queueMicrotask(abort);
+    else signal.addEventListener("abort", abort, { once: true });
+    return () => {
+      signal.removeEventListener("abort", abort);
+    };
   }
   send(value: unknown): void {
     if (this.socket?.readyState !== WebSocket.OPEN)

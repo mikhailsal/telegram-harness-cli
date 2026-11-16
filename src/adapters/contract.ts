@@ -7,10 +7,26 @@ export type AdapterCapability =
   | "newSession"
   | "attach"
   | "steer"
-  | "compact";
+  | "compact"
+  | "configure";
+export interface HarnessSettings {
+  model?: string;
+  effort?: string;
+}
+export interface HarnessModel {
+  id: string;
+  model: string;
+  displayName: string;
+  description: string;
+  hidden: boolean;
+  isDefault: boolean;
+  defaultReasoningEffort: string;
+  supportedReasoningEfforts: { reasoningEffort: string; description: string }[];
+}
 export interface AdapterInput {
   correlationId: string;
   text: string;
+  settings?: HarnessSettings;
 }
 export interface AdapterSession {
   id: string;
@@ -26,6 +42,7 @@ export interface AdapterEvent {
     | "approval-requested"
     | "question-requested"
     | "approval-resolved"
+    | "turn-error"
     | "error";
   sessionId: string;
   cursor: string;
@@ -57,6 +74,8 @@ export interface HarnessAdapter {
   steer?(input: AdapterInput, turnId: string): Promise<void>;
   compact?(): Promise<void>;
   pendingState?(): Promise<"none" | "some" | "unknown">;
+  listModels?(signal: AbortSignal): Promise<HarnessModel[]>;
+  currentSettings?(signal: AbortSignal): Promise<HarnessSettings | undefined>;
 }
 export class UnsupportedCapabilityError extends Error {
   readonly capability: AdapterCapability;
@@ -76,5 +95,11 @@ export class CompactRejectedError extends Error {
   constructor() {
     super("Compaction was rejected by the harness");
     this.name = "CompactRejectedError";
+  }
+}
+export class SettingsUnsupportedError extends Error {
+  constructor() {
+    super("The harness cannot list models");
+    this.name = "SettingsUnsupportedError";
   }
 }

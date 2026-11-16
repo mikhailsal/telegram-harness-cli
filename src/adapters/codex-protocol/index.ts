@@ -6,12 +6,15 @@ import type {
   AdapterSession,
   ApprovalDecision,
   HarnessAdapter,
+  HarnessModel,
+  HarnessSettings,
 } from "../contract.ts";
 import { EventQueue } from "./queue.ts";
 import { ProtocolTransport, RpcError } from "./transport.ts";
 import { CompactRejectedError, SteerRejectedError } from "../contract.ts";
 import { historyEvents, itemEvent } from "./events.ts";
 import { readHistory, readPendingState } from "./thread.ts";
+import { listModels, readSettings, turnErrorEvent } from "./settings.ts";
 import { itemProgress, ReasoningProgress } from "./progress.ts";
 import type { Notification } from "./schema.ts";
 import {
@@ -48,6 +51,7 @@ export class ProtocolAdapter implements HarnessAdapter {
     "attach",
     "steer",
     "compact",
+    "configure",
   ]);
   private readonly options: ProtocolOptions;
   private readonly queue = new EventQueue<AdapterEvent>();
@@ -121,6 +125,7 @@ export class ProtocolAdapter implements HarnessAdapter {
       threadId: this.sessionId,
       clientUserMessageId: input.correlationId,
       input: [{ type: "text", text: input.text, text_elements: [] }],
+      ...input.settings,
     });
     return { turnId: turnResult.parse(result).turn.id };
   }
@@ -213,6 +218,14 @@ export class ProtocolAdapter implements HarnessAdapter {
   async pendingState(): Promise<"none" | "some" | "unknown"> {
     if (!this.connected || !this.sessionId) return "unknown";
     return readPendingState(this.transport, this.sessionId);
+  }
+  async listModels(signal: AbortSignal): Promise<HarnessModel[]> {
+    if (!this.ready) throw new Error("Session is not ready");
+    return await listModels(this.transport, signal);
+  }
+  async currentSettings(signal: AbortSignal): Promise<HarnessSettings> {
+    if (!this.ready || !this.sessionId) throw new Error("Session is not ready");
+    return await readSettings(this.transport, this.sessionId, signal);
   }
   async commandExec(
     command: string[],
@@ -313,6 +326,9 @@ export class ProtocolAdapter implements HarnessAdapter {
       if (progress) this.queue.push(progress);
     } else if (message.method === "item/completed") {
       this.handleItem(message);
+    } else {
+      const event = turnErrorEvent(this.sessionId, message);
+      if (event) this.emit(event);
     }
   }
   private handleItemStarted(message: Notification): void {

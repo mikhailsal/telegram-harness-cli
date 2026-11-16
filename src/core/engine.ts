@@ -23,6 +23,7 @@ const transientEvents = new Set<AdapterEvent["kind"]>([
   "approval-requested",
   "question-requested",
   "approval-resolved",
+  "turn-error",
   "error",
   "progress",
 ]);
