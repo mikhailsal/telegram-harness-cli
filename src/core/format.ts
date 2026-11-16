@@ -1,11 +1,12 @@
 import type { TelegramMessageFormat } from "../channels/types.js";
 import type { Turn } from "../store/index.js";
 import type { RuntimeContext } from "./context.js";
+import { routingTurnId } from "./continuation.js";
 
 export function turnChatId(ctx: RuntimeContext, turn: Turn): string {
   return (
     ctx.store
-      .messagesForTurn(turn.id)
+      .messagesForTurn(routingTurnId(ctx.store, turn.id))
       .filter((row) => row.author === "user")
       .at(-1)?.chatId ??
     ctx.store.getCursor("chat-id") ??

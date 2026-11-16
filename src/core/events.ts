@@ -14,6 +14,11 @@ import {
   markCompactionNotice,
 } from "./command-completions.js";
 import { isCompactionOnly, observeCompaction } from "./compaction.js";
+import {
+  continuedTurnId,
+  linkContinuation,
+  routingTurnId,
+} from "./continuation.js";
 export { queueRequestSummaries } from "./request-summary.js";
 
 export function activeTurn(
@@ -47,6 +52,7 @@ export class AdapterEvents {
     }
     const turn = this.findTurn(event);
     if (!turn) return;
+    linkContinuation(this.ctx, turn, event);
     observeCompaction(this.ctx, turn, event);
     markCompactionNotice(this.ctx, turn, event);
     if (
@@ -170,6 +176,9 @@ export class AdapterEvents {
       });
   }
   private mirrorInput(event: AdapterEvent, turn: Turn): void {
+    // A continuation's input is Codex resuming a Telegram task, not terminal
+    // typing, and the bridge already knows the chat it belongs to.
+    if (continuedTurnId(this.ctx.store, turn)) return;
     const marker = `mirror/${turn.id}/${event.cursor}`;
     if (this.ctx.store.getCursor(marker)) return;
     const chat = this.ctx.store.getCursor("chat-id");
@@ -203,9 +212,10 @@ export class AdapterEvents {
     this.ctx.store.setCursor(marker, "1");
   }
   private async approval(event: AdapterEvent, turn: Turn): Promise<void> {
+    const owner = routingTurnId(this.ctx.store, turn.id);
     const inbox = this.ctx.store
       .listInbox(["assigned", "consumed"])
-      .find((row) => row.turnId === turn.id);
+      .find((row) => row.turnId === owner);
     const chat = inbox?.chatId ?? this.ctx.store.getCursor("chat-id");
     const user = inbox?.userId ?? this.ctx.store.getCursor("user-id");
     if (!chat || !user)

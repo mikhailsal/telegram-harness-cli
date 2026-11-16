@@ -62,6 +62,8 @@ it("renders ephemeral progress, queue, stall and recovery states", async () => {
     expect(draft.mock.lastCall?.[2]).toContain(
       "Thinking: Investigating the issue",
     );
+    // protects=no hint before stall_timeout; fails_when=the hint shows on a live turn; no_claim=none beyond protects
+    expect(draft.mock.lastCall?.[2]).not.toContain("/stop");
     store.createTurn({
       id: "b0000000-0000-4000-8000-000000000002",
       entityId: "entity",
@@ -71,8 +73,10 @@ it("renders ephemeral progress, queue, stall and recovery states", async () => {
     await vi.advanceTimersByTimeAsync(5000);
     statuses.refresh();
     await vi.advanceTimersByTimeAsync(1000);
-    expect(draft.mock.lastCall?.[2]).toContain("No updates");
-    expect(draft.mock.lastCall?.[2]).toContain("Waiting: 1");
+    // protects=a stalled status tells the user how to interrupt; fails_when=the hint is missing or follows the queue line; no_claim=Telegram rendering of the draft (channel is a mock)
+    expect(draft.mock.lastCall?.[2]).toMatch(
+      / · No updates for \S+\n\/stop interrupts the task\nWaiting: 1$/,
+    );
     ctx.adapterReady = false;
     statuses.refresh();
     await vi.advanceTimersByTimeAsync(1000);
@@ -178,6 +182,55 @@ it("removes cancelled statuses and shows submission for the next turn", async ()
     statuses.refresh();
     await vi.advanceTimersByTimeAsync(1);
     expect(draft.mock.lastCall?.[2]).toContain("Sending to agent");
+  } finally {
+    await statuses.close();
+    store.close();
+  }
+});
+
+it("shows the stop hint in Russian when the turn stalls", async () => {
+  const { store, draft, statuses } = setup();
+  try {
+    store.setCursor("language", "ru");
+    statuses.refresh();
+    await vi.advanceTimersByTimeAsync(5000);
+    statuses.refresh();
+    await vi.advanceTimersByTimeAsync(1000);
+    // protects=Russian stalled status carries the Russian hint at the threshold (>=); fails_when=hint missing or English; no_claim=Telegram rendering (channel is a mock)
+    expect(draft.mock.lastCall?.[2]).toMatch(
+      / · Нет новостей \S+\n\/stop прервёт задачу$/,
+    );
+  } finally {
+    await statuses.close();
+    store.close();
+  }
+});
+
+it("labels a continued terminal turn as continuing, not as a terminal task", async () => {
+  const { store, now, draft, statuses, id } = setup();
+  try {
+    store.transitionTurn(id, "active", "completed");
+    const labels: string[] = [];
+    for (const linked of [false, true]) {
+      const turn = `d000000${linked ? "2" : "1"}-0000-4000-8000-000000000004`;
+      store.createTurn({
+        id: turn,
+        entityId: "entity",
+        source: "terminal",
+        createdAt: now().toISOString(),
+      });
+      store.transitionTurn(turn, "queued", "active", {
+        updatedAt: now().toISOString(),
+      });
+      if (linked) store.setCursor(`continues/${turn}`, id);
+      statuses.refresh();
+      await vi.advanceTimersByTimeAsync(1);
+      labels.push(String(draft.mock.lastCall?.[2]));
+      store.transitionTurn(turn, "active", "completed");
+    }
+    // protects=a continuation shows the continuing label and a plain terminal task keeps its own; fails_when=the label ignores the continues link; no_claim=Telegram rendering (channel is a mock)
+    expect(labels[0]).toContain("terminal task");
+    expect(labels[1]).toContain("Continuing the task");
   } finally {
     await statuses.close();
     store.close();

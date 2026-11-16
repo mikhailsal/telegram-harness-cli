@@ -2,6 +2,7 @@ import { ChannelStatus, catalog } from "../channels/index.js";
 import type { AdapterEvent } from "../adapters/contract.js";
 import type { Turn } from "../store/index.js";
 import type { RuntimeContext } from "./context.js";
+import { continuedTurnId } from "./continuation.js";
 import { activeTurn } from "./events.js";
 import { nextQueuedTurn } from "./queue.js";
 import { turnDraftId } from "./turn-draft.js";
@@ -97,8 +98,13 @@ export class TurnStatuses {
     if (turn.status === "submitting" || turn.status === "uncertain")
       return strings.submitting;
     if (this.current?.kind === "compacting") return strings.compacting;
-    if (turn.source === "terminal") return strings.terminalWorking;
+    if (turn.source === "terminal") return this.terminalLabel(turn, strings);
     return activityLabel(this.current, strings);
+  }
+  private terminalLabel(turn: Turn, strings: (typeof catalog)["en"]): string {
+    return continuedTurnId(this.ctx.store, turn)
+      ? strings.continuing
+      : strings.terminalWorking;
   }
   refresh(): void {
     if (this.ctx.config.status === "off") return;
@@ -123,7 +129,7 @@ export class TurnStatuses {
         (row) => row.entityId === this.ctx.entityId && row.id !== turn.id,
       ).length;
     const delay = elapsed(new Date(this.lastEvent).toISOString(), now);
-    return `${this.label(turn, now)} ${elapsed(turn.status === "queued" ? turn.createdAt : turn.updatedAt, now)}${stalled ? ` · ${strings.stalled} ${delay}` : ""}${count ? `\n${strings.queue}: ${String(count)}` : ""}`;
+    return `${this.label(turn, now)} ${elapsed(turn.status === "queued" ? turn.createdAt : turn.updatedAt, now)}${stalled ? ` · ${strings.stalled} ${delay}\n${strings.stalledHint}` : ""}${count ? `\n${strings.queue}: ${String(count)}` : ""}`;
   }
   private status(turn: Turn): ChannelStatus | undefined {
     const old = this.rows.get(turn.id);

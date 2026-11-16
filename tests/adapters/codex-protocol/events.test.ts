@@ -134,3 +134,43 @@ it("summarizes reasoning deltas and recognizes file reads", () => {
     ),
   ).toBeUndefined();
 });
+
+describe("turn chains", () => {
+  it("carries the root turn of a recovery turn in its live start event", () => {
+    const message = notification.parse({
+      method: "turn/started",
+      params: {
+        threadId: "thread",
+        turn: {
+          id: "recovery",
+          status: "inProgress",
+          items: [],
+          rootTurnId: "original",
+        },
+      },
+    });
+    if (!message.params.turn) throw new Error("missing turn");
+    // protects=a daemon_recovery turn names the turn it continues; fails_when=rootTurnId is dropped by the schema or the event; no_claim=that Codex sends rootTurnId on turn/started (payload shaped after the 0.169.0 schema)
+    expect(historyEvents("thread", message.params.turn)).toEqual([
+      {
+        sessionId: "thread",
+        turnId: "recovery",
+        kind: "turn-started",
+        cursor: "recovery/start",
+        data: { rootTurnId: "original" },
+      },
+    ]);
+  });
+  it("omits the root turn when it is missing or the turn itself", () => {
+    const parsed = turnList.parse({
+      data: [
+        { id: "a", status: "completed", items: [], rootTurnId: null },
+        { id: "b", status: "completed", items: [], rootTurnId: "b" },
+        { id: "c", status: "completed", items: [] },
+      ],
+    });
+    // protects=ordinary turns keep a data-free start event; fails_when=a null or self root is reported as a chain; no_claim=none beyond protects
+    for (const turn of parsed.data)
+      expect(historyEvents("thread", turn)[0]).not.toHaveProperty("data");
+  });
+});
