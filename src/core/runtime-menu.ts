@@ -13,6 +13,8 @@ export async function registerMenus(ctx: RuntimeContext): Promise<void> {
           "mode",
           "compact",
           "format",
+          "model",
+          "effort",
           "help",
         ] as const;
         const signal = AbortSignal.any([

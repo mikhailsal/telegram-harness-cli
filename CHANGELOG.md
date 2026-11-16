@@ -1,0 +1,50 @@
+# Changelog
+
+All notable changes to `thc` are listed here. Versions follow
+[Semantic Versioning](https://semver.org/).
+
+## [0.1.0] - 2026-11-16
+
+The first versioned release.
+
+### Added
+
+- A durable bridge between a Telegram private chat and a long-lived Codex
+  session. The bridge owns the queue, the delivered history and the recovery
+  state, so messages survive restarts.
+- Two Codex adapters: the shared app-server protocol (the default) and a
+  guarded tmux runner.
+- One-command setup. The installer prepares Node, npm and Codex in your user
+  directories. The `thc init` wizard then checks the bot token, authorizes
+  your Telegram user, asks for the sandbox level and starts a systemd user
+  service.
+- One bot per project, each with its own service, conversation, queue and
+  state directory.
+- Telegram controls: `/mode queue|steer` for follow-ups, `/format rich|regular`
+  for answers, `/stop`, `/new`, `/status` and button choosers.
+- `/model` and `/effort` switch the Codex model and reasoning effort from
+  Telegram:
+  - A card lists the visible models with their descriptions. A tap saves the
+    model, then offers its efforts.
+  - `/model <id>`, `/model default` and `/model reset` change the model
+    directly.
+  - The choice applies to the next turn and to queued messages, and it stays
+    until you change it.
+- `/status` shows the model that runs now, what Telegram sets for the next
+  turns, and why they differ.
+- When Codex rejects a model, the bot says so once and offers a one-tap switch
+  to Codex's default. Queued messages wait until you choose.
+- Live status drafts with the thinking animation, rich final messages,
+  approvals, attachments and history search.
+- `thc doctor` compares the installed Codex with the tested baseline. Codex
+  stays alive across `thc stop`, and daemon recovery is reported as it
+  happened.
+
+### Fixed
+
+- Setup shows the user ID and sandbox prompts. It also writes a
+  `WorkingDirectory` systemd accepts and keeps the caller's PATH for the
+  service.
+- History search rejects invalid dates and accepts relative hours.
+- The tmux runner recognizes changing Codex activity headings and suppresses
+  the interactive startup update prompt.

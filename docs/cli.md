@@ -151,8 +151,31 @@ recovery retries the edit. Cancellation and preview relocation still finalize
 and delete a temporary status because action cancellation did not clear rich
 previews in the tested Telegram client.
 
-`thc tail` reads `.thc/bridge.log`. `setting.applied` records applied mode and
-format changes, and `turn.execution` records the effective settings before a
+### Switching the Codex model
+
+With the protocol adapter, `/model` and `/effort` switch the model and the
+reasoning effort of the next turns. They need codex-cli 0.169.0 or newer.
+
+| Telegram command          | Result                                                                                   |
+| ------------------------- | ---------------------------------------------------------------------------------------- |
+| `/model`                  | Card of visible models with descriptions; a tap saves the model, then offers its efforts |
+| `/model gpt-6.1-sol`      | Applies that model; an effort it does not support resets to its default                  |
+| `/model default`          | Pins the model Codex marks as default, with its default effort                           |
+| `/model reset`            | Stops sending a model or effort; the thread keeps its current setting                    |
+| `/effort`, `/effort high` | Card or direct change for the current model's efforts                                    |
+
+A choice applies from the next turn, queued messages included; a running turn
+keeps its settings, and in Steer mode follow-ups join it. Telegram's choice
+wins: while one is set, every Telegram turn sends it, even after a `/model` in
+the attached TUI. Without one, the bridge sends nothing and TUI changes stay in
+force. `/status` shows the running model, the Telegram override and a note when
+they differ. If Codex rejects the chosen model, the failed message is not
+resent, queued messages wait, and a notice offers one tap back to Codex's
+default. The tmux adapter cannot switch models.
+
+`thc tail` reads `.thc/bridge.log`. `setting.applied` records applied mode,
+format and model (`harness`) changes, and `turn.execution` records the effective
+settings, including the `model` and `effort` sent (or `none`), before a
 submission or steering attempt. Their durable audit entries are also stored in
 `.thc/store.db` under `meta` keys `setting-applied/UPDATE_ID` and
 `turn-execution/TURN_ID/submit|steer`, so log rotation does not erase them.

@@ -25,13 +25,15 @@ export function decodeInbox(inbox: Inbox): ChannelEvent {
     throw new Error("Stored inbox identity mismatch");
   return event;
 }
-const knownCommands = new Set([
+export const knownCommands = new Set([
   "stop",
   "status",
   "new",
   "mode",
   "compact",
   "format",
+  "model",
+  "effort",
   "help",
   "start",
 ]);

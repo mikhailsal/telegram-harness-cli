@@ -20,7 +20,11 @@ function setup(ready: boolean, active: boolean) {
   const send = vi.fn().mockResolvedValue(1);
   const setCursor = vi.fn();
   const context = {
-    store: { listTurns: () => (active ? [{}] : []), setCursor },
+    store: {
+      listTurns: () => (active ? [{}] : []),
+      setCursor,
+      getCursor: () => undefined,
+    },
     adapterReady: ready,
     rotateSession: rotate,
     transient: { send },

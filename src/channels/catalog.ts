@@ -30,6 +30,8 @@ export const catalog = {
     mode: "Mode",
     compact: "Compact context",
     format: "Message format",
+    model: "Codex model",
+    effort: "Reasoning effort",
     formatRich: "Rich",
     formatRegular: "Regular",
     formatRichInfo:
@@ -45,7 +47,7 @@ export const catalog = {
       "⚠️ Compaction may have started. Check status before trying again.",
     help: "Help",
     welcome:
-      "Connected to Codex. Send a task, photo, or file. Commands are in the menu. Use /mode queue|steer for follow-ups during a task: Queue waits, Steer sends immediately. Use /format to change format: Rich does not receive partial text quotes.",
+      "Connected to Codex. Send a task, photo, or file. Commands are in the menu. Use /mode queue|steer for follow-ups during a task: Queue waits, Steer sends immediately. Use /format to change format: Rich does not receive partial text quotes. Use /model and /effort to switch the Codex model and reasoning effort.",
     downloadFailed: "File could not be downloaded",
     tooLarge: "Telegram cannot download files over 20 MiB",
     resolvedElsewhere: "Resolved in terminal",
@@ -110,6 +112,8 @@ export const catalog = {
     mode: "Режим",
     compact: "Сжать контекст",
     format: "Формат сообщений",
+    model: "Модель Codex",
+    effort: "Глубина рассуждений",
     formatRich: "Rich",
     formatRegular: "Обычный",
     formatRichInfo:
@@ -125,7 +129,7 @@ export const catalog = {
       "⚠️ Сжатие могло начаться. Проверь статус перед повтором.",
     help: "Помощь",
     welcome:
-      "Подключён к Codex. Пиши задачи, присылай фото и файлы. Команды — в меню. Дополнения во время работы: /mode queue|steer, Queue (в очередь), Steer (сразу в работу). Формат: /format; в Rich цитаты фрагментов текста не передаются.",
+      "Подключён к Codex. Пиши задачи, присылай фото и файлы. Команды — в меню. Дополнения во время работы: /mode queue|steer, Queue (в очередь), Steer (сразу в работу). Формат: /format; в Rich цитаты фрагментов текста не передаются. Модель и глубину рассуждений Codex меняют /model и /effort.",
     downloadFailed: "Файл не скачался",
     tooLarge: "Telegram не даёт боту скачать файлы больше 20 МиБ",
     resolvedElsewhere: "Решено в терминале",

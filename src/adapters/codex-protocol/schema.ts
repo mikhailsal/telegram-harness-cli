@@ -72,3 +72,51 @@ export const pendingStatus = z.object({
     ]),
   }),
 });
+
+export const modelList = z
+  .object({
+    data: z.array(
+      z
+        .object({
+          id: z.string(),
+          model: z.string(),
+          displayName: z.string(),
+          description: z.string().catch(""),
+          hidden: z.boolean(),
+          isDefault: z.boolean(),
+          defaultReasoningEffort: z.string(),
+          supportedReasoningEfforts: z.array(
+            z
+              .object({
+                reasoningEffort: z.string(),
+                description: z.string().catch(""),
+              })
+              .loose(),
+          ),
+        })
+        .loose(),
+    ),
+    nextCursor: z.string().nullish(),
+  })
+  .loose();
+
+export const threadSettings = z
+  .object({
+    thread: z
+      .object({
+        model: z.string().nullish(),
+        reasoningEffort: z.string().nullish(),
+      })
+      .loose(),
+  })
+  .loose();
+
+export const turnErrorParams = z
+  .object({
+    turnId: z.string(),
+    willRetry: z.boolean().optional(),
+    error: z
+      .object({ message: z.string(), codexErrorInfo: z.unknown().optional() })
+      .loose(),
+  })
+  .loose();

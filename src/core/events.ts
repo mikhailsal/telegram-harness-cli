@@ -19,6 +19,7 @@ import {
   linkContinuation,
   routingTurnId,
 } from "./continuation.js";
+import { noticeModelUnavailable } from "./harness-settings-notice.js";
 export { queueRequestSummaries } from "./request-summary.js";
 
 export function activeTurn(
@@ -46,10 +47,7 @@ export class AdapterEvents {
       await this.pending.resolved(event);
       return;
     }
-    if (event.kind === "error") {
-      this.ctx.log("adapter_disconnected");
-      return;
-    }
+    if (this.errorEvent(event)) return;
     const turn = this.findTurn(event);
     if (!turn) return;
     linkContinuation(this.ctx, turn, event);
@@ -72,6 +70,14 @@ export class AdapterEvents {
       return;
     }
     if (event.kind === "turn-completed") await this.completedEvent(event, turn);
+  }
+  // `error` is a lost connection; `turn-error` is one failed turn.
+  private errorEvent(event: AdapterEvent): boolean {
+    if (event.kind === "error") this.ctx.log("adapter_disconnected");
+    else if (event.kind === "turn-error")
+      noticeModelUnavailable(this.ctx, this.delivery.serialize, event);
+    else return false;
+    return true;
   }
   private async completedEvent(event: AdapterEvent, turn: Turn): Promise<void> {
     const key = `secret-interrupt/${turn.id}`;
