@@ -1,9 +1,13 @@
 import { expect, it, vi } from "vitest";
 import {
   daemonCommand,
+  ownCgroup,
   startDaemon,
   type DaemonExec,
 } from "../../src/core/daemon-start.js";
+
+const USER_UNIT =
+  "0::/user.slice/user-1000.slice/user@1000.service/app.slice/thc-x.service\n";
 
 function options(env: NodeJS.ProcessEnv, exec: DaemonExec) {
   const log = vi.fn();
@@ -18,6 +22,7 @@ function options(env: NodeJS.ProcessEnv, exec: DaemonExec) {
       signal: controller.signal,
       log,
       exec,
+      cgroup: () => USER_UNIT,
     },
   };
 }
@@ -50,13 +55,22 @@ it("starts the daemon in its own systemd scope when the bridge is a service", as
   );
 });
 
-it("starts Codex directly outside systemd", () => {
-  // protects=a foreground bridge keeps the direct start; fails_when=systemd-run is required without a service; no_claim=none beyond protects
-  expect(daemonCommand("codex", {})).toEqual({
+it("starts Codex directly outside a systemd user service", () => {
+  const direct = {
     file: "codex",
     args: ["app-server", "daemon", "start"],
     isolated: false,
-  });
+  };
+  // protects=a foreground bridge, a system unit or a shell that inherited INVOCATION_ID keeps the direct start; fails_when=systemd-run --user is used where no user scope exists; no_claim=detection of a broken user bus inside a user service
+  expect(daemonCommand("codex", {}, USER_UNIT)).toEqual(direct);
+  expect(
+    daemonCommand(
+      "codex",
+      { INVOCATION_ID: "abc" },
+      "0::/system.slice/thc.service\n",
+    ),
+  ).toEqual(direct);
+  expect(daemonCommand("codex", { INVOCATION_ID: "abc" }, "")).toEqual(direct);
 });
 
 it("does not fall back to a direct start when the isolated start fails", async () => {
@@ -103,4 +117,9 @@ it("reports exit statuses and unknown failures by code only", async () => {
     ["daemon.start-failed", { isolated: true, code: 1 }],
     ["daemon.start-failed", { isolated: true, code: "unknown" }],
   ]);
+});
+
+it("reads the bridge's own cgroup from the kernel", () => {
+  // protects=the default isolation check sees this process's real cgroup line; fails_when=the reader returns another file or no unified-hierarchy entry; no_claim=cgroup layout on hosts without cgroup v2
+  expect(ownCgroup()).toMatch(/^0::\//m);
 });

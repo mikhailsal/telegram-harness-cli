@@ -47,5 +47,10 @@ export function linkContinuation(
     candidates.find(
       (candidate) => !ctx.store.getCursor(`followup-of/${candidate.id}`),
     ) ?? candidates[0];
-  if (target) ctx.store.setCursor(`continues/${turn.id}`, target.id);
+  if (!target) return;
+  ctx.store.setCursor(`continues/${turn.id}`, target.id);
+  // The turn's format was fixed when it was created, before its chat was
+  // known; the continuation answers in the format of the turn it continues.
+  const format = ctx.store.getCursor(`turn-format/${target.id}`);
+  if (format) ctx.store.setCursor(`turn-format/${turn.id}`, format);
 }

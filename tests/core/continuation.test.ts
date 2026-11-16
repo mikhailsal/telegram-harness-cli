@@ -1,149 +1,11 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, expect, it, vi } from "vitest";
-import { openStore } from "../../src/store/index.js";
-import { parseConfig } from "../../src/core/config.js";
-import { Delivery } from "../../src/core/delivery.js";
-import { TurnEngine } from "../../src/core/engine.js";
-import type { RuntimeContext } from "../../src/core/context.js";
-import type { ChannelEvent } from "../../src/channels/index.js";
-
-const roots: string[] = [];
-afterEach(() => {
-  for (const root of roots.splice(0))
-    rmSync(root, { recursive: true, force: true });
-});
-
-type Deliver = (
-  chat: string,
-  chunk: { plain: string },
-  options?: { replyToMessageId?: number },
-) => Promise<{ messageIds: number[]; visibleText: string }>;
-
-function seed(root: string) {
-  const store = openStore(join(root, "store.sqlite"));
-  const now = new Date("2026-11-15T07:40:00Z");
-  store.putEntity({
-    id: "entity",
-    directory: root,
-    botId: "bot",
-    createdAt: now.toISOString(),
-  });
-  store.putSession({
-    id: "session",
-    entityId: "entity",
-    harness: "codex",
-    externalId: "thread",
-    startedAt: now.toISOString(),
-    endedAt: null,
-  });
-  return { store, now };
-}
-function telegram(deliverChunk: Deliver) {
-  return {
-    channel: {
-      hasDraft: () => false,
-      deliverChunk,
-      answerCallback: vi.fn().mockResolvedValue(undefined),
-      bot: {
-        api: { sendMessage: vi.fn().mockResolvedValue({ message_id: 9 }) },
-      },
-    },
-    transient: {
-      removeKind: vi.fn().mockResolvedValue(undefined),
-      sweep: vi.fn().mockResolvedValue(undefined),
-      send: vi.fn().mockResolvedValue(1),
-      create: vi.fn().mockResolvedValue(1),
-      remove: vi.fn().mockResolvedValue(undefined),
-      repost: vi.fn().mockResolvedValue(false),
-      registerExisting: vi.fn(),
-    },
-  };
-}
-function setup() {
-  const root = mkdtempSync(join(tmpdir(), "thc-continuation-"));
-  roots.push(root);
-  const { store, now } = seed(root);
-  let nextMessageId = 100;
-  const deliverChunk = vi.fn<Deliver>((_chat, chunk) =>
-    Promise.resolve({
-      messageIds: [nextMessageId++],
-      visibleText: chunk.plain,
-    }),
-  );
-  const context = {
-    directory: root,
-    config: parseConfig({
-      token: { env: "TOKEN" },
-      allowlist: [1],
-      sandbox: "read-only",
-      status: "off",
-    }),
-    store,
-    adapter: {
-      capabilities: new Set(["submit", "observe", "interrupt", "reconcile"]),
-      submit: vi.fn().mockResolvedValue({ turnId: "turn-1" }),
-      interrupt: vi.fn().mockResolvedValue(undefined),
-    },
-    entityId: "entity",
-    sessionId: "session",
-    adapterReady: true,
-    now: () => now,
-    ...telegram(deliverChunk),
-    files: { download: vi.fn() },
-    notice: {},
-    signal: new AbortController().signal,
-    log: vi.fn(),
-    persistAdapter: vi.fn(),
-    rotateSession: vi.fn(),
-  } as unknown as RuntimeContext;
-  const engine = new TurnEngine(context, new Delivery(context));
-  return { store, engine, deliverChunk, context };
-}
-async function recover(engine: TurnEngine) {
-  await engine.event({
-    kind: "turn-completed",
-    sessionId: "thread",
-    turnId: "turn-1",
-    cursor: "turn-1/complete",
-    data: { status: "interrupted" },
-  });
-  await engine.event({
-    kind: "turn-started",
-    sessionId: "thread",
-    turnId: "recovery",
-    cursor: "recovery/start",
-    data: { rootTurnId: "turn-1" },
-  });
-  await engine.event({
-    kind: "turn-completed",
-    sessionId: "thread",
-    turnId: "recovery",
-    cursor: "recovery/complete",
-    text: "Review done",
-  });
-}
-function message(updateId: number, text: string): ChannelEvent {
-  return {
-    kind: "message",
-    updateId,
-    text,
-    attachments: [],
-    chatId: "1",
-    userId: "1",
-    messageId: updateId,
-    sentAt: "2026-11-15T07:36:34.000Z",
-    language: "en",
-  };
-}
-function lastDelivery(deliverChunk: ReturnType<typeof setup>["deliverChunk"]) {
-  const call = deliverChunk.mock.calls.at(-1);
-  return {
-    plain: call?.[1].plain,
-    options: call?.[2],
-  };
-}
+import { expect, it, vi } from "vitest";
+import type { TurnEngine } from "../../src/core/engine.js";
+import {
+  lastDelivery,
+  message,
+  recover,
+  setup,
+} from "./continuation-fixture.js";
 
 it("reports a Codex interruption truthfully and answers the continuation under the user's message", async () => {
   const { engine, store, deliverChunk } = setup();
@@ -269,6 +131,96 @@ it("delivers the continuation to the chat of the original turn", async () => {
     await recover(engine);
     // protects=a continuation goes to the chat that asked, not the most recent chat; fails_when=another allowlisted user's chat receives the answer; no_claim=multi-user admission (chat cursor set directly)
     expect(deliverChunk.mock.calls.at(-1)?.[0]).toBe("1");
+  } finally {
+    await engine.close();
+    store.close();
+  }
+});
+
+function seedTelegramTurn(
+  store: ReturnType<typeof setup>["store"],
+  id: string,
+  externalTurnId: string,
+  sessionId = "session",
+) {
+  store.createTurn({
+    id,
+    entityId: "entity",
+    source: "telegram",
+    createdAt: "2026-11-15T07:40:00.000Z",
+  });
+  store.transitionTurn(id, "queued", "active", {
+    externalTurnId,
+    sessionId,
+    updatedAt: "2026-11-15T07:40:00.000Z",
+  });
+  store.transitionTurn(id, "active", "completed");
+}
+function start(engine: TurnEngine, turnId: string, rootTurnId: string) {
+  return engine.event({
+    kind: "turn-started",
+    sessionId: "thread",
+    turnId,
+    cursor: `${turnId}/start`,
+    data: { rootTurnId },
+  });
+}
+function linkOf(store: ReturnType<typeof setup>["store"], external: string) {
+  const turn = store
+    .listTurns(["active", "completed"])
+    .find((row) => row.externalTurnId === external);
+  return store.getCursor(`continues/${turn?.id ?? ""}`);
+}
+
+it("links a continuation to the original turn rather than its accepted steer", async () => {
+  const { engine, store } = setup();
+  try {
+    // The steer sorts before the root, so a plain first match would pick it.
+    seedTelegramTurn(store, "b-root", "turn-1");
+    seedTelegramTurn(store, "a-steer", "turn-1");
+    store.setCursor("followup-of/a-steer", "b-root");
+    await start(engine, "recovery", "turn-1");
+    // protects=the continuation anchors on the original turn, not its steer peer; fails_when=the followup-of preference is dropped and the earliest candidate wins; no_claim=reply or chat routing (covered by the steer test)
+    expect(linkOf(store, "recovery")).toBe("b-root");
+  } finally {
+    await engine.close();
+    store.close();
+  }
+});
+
+it("does not link a root that belongs to another session", async () => {
+  const { engine, store } = setup();
+  try {
+    store.putSession({
+      id: "old",
+      entityId: "entity",
+      harness: "codex",
+      externalId: "old-thread",
+      startedAt: "2026-11-14T07:40:00.000Z",
+      endedAt: "2026-11-14T08:40:00.000Z",
+    });
+    seedTelegramTurn(store, "old-root", "turn-1", "old");
+    await start(engine, "recovery", "turn-1");
+    // protects=a turn id reused in a rotated session never captures a terminal turn; fails_when=the sessionId filter is dropped; no_claim=session rotation itself
+    expect(linkOf(store, "recovery")).toBeUndefined();
+  } finally {
+    await engine.close();
+    store.close();
+  }
+});
+
+it("never links a Telegram turn and never re-links a linked one", async () => {
+  const { engine, store } = setup();
+  try {
+    seedTelegramTurn(store, "root-a", "root-a-ext");
+    seedTelegramTurn(store, "root-b", "root-b-ext");
+    await engine.accept([message(7, "review my PR")], 8);
+    await start(engine, "turn-1", "root-a-ext");
+    await start(engine, "recovery", "root-a-ext");
+    await start(engine, "recovery", "root-b-ext");
+    // protects=only a terminal turn is linked and its first link sticks; fails_when=a Telegram turn gets a continues link or a later start event moves the link; no_claim=none beyond protects
+    expect(linkOf(store, "turn-1")).toBeUndefined();
+    expect(linkOf(store, "recovery")).toBe("root-a");
   } finally {
     await engine.close();
     store.close();

@@ -127,7 +127,7 @@ for both adapters is documented in the [README](../README.md).
 Use `thc status`, `thc doctor`, and `thc tail` to inspect the bridge. `thc stop`
 signals only the process that owns the folder lock and waits up to 15 seconds
 for it to exit, so `thc stop && thc init` is safe; if the bridge is still
-running after that, it fails with `E_ALREADY_RUNNING`. Under systemd the bridge
+running after that, it fails with `E_ALREADY_RUNNING`. As a systemd user service the bridge
 starts the Codex daemon in its own transient scope, so `thc stop` and bridge
 restarts neither stop Codex nor interrupt its running task; to interrupt the
 task itself, send `/stop` in Telegram. A daemon started by an older bridge

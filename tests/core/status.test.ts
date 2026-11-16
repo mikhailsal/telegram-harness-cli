@@ -205,3 +205,34 @@ it("shows the stop hint in Russian when the turn stalls", async () => {
     store.close();
   }
 });
+
+it("labels a continued terminal turn as continuing, not as a terminal task", async () => {
+  const { store, now, draft, statuses, id } = setup();
+  try {
+    store.transitionTurn(id, "active", "completed");
+    const labels: string[] = [];
+    for (const linked of [false, true]) {
+      const turn = `d000000${linked ? "2" : "1"}-0000-4000-8000-000000000004`;
+      store.createTurn({
+        id: turn,
+        entityId: "entity",
+        source: "terminal",
+        createdAt: now().toISOString(),
+      });
+      store.transitionTurn(turn, "queued", "active", {
+        updatedAt: now().toISOString(),
+      });
+      if (linked) store.setCursor(`continues/${turn}`, id);
+      statuses.refresh();
+      await vi.advanceTimersByTimeAsync(1);
+      labels.push(String(draft.mock.lastCall?.[2]));
+      store.transitionTurn(turn, "active", "completed");
+    }
+    // protects=a continuation shows the continuing label and a plain terminal task keeps its own; fails_when=the label ignores the continues link; no_claim=Telegram rendering (channel is a mock)
+    expect(labels[0]).toContain("terminal task");
+    expect(labels[1]).toContain("Continuing the task");
+  } finally {
+    await statuses.close();
+    store.close();
+  }
+});
