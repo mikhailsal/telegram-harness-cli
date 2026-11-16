@@ -11,15 +11,14 @@ import { EventQueue } from "./queue.ts";
 import { ProtocolTransport, RpcError } from "./transport.ts";
 import { CompactRejectedError, SteerRejectedError } from "../contract.ts";
 import { historyEvents, itemEvent } from "./events.ts";
+import { readHistory, readPendingState } from "./thread.ts";
 import { itemProgress, ReasoningProgress } from "./progress.ts";
 import type { Notification } from "./schema.ts";
 import {
   commandResult,
   questionResponse,
-  pendingStatus,
   notification,
   threadResult,
-  turnList,
   turnResult,
 } from "./schema.ts";
 
@@ -199,7 +198,7 @@ export class ProtocolAdapter implements HarnessAdapter {
     this.ready = false;
     await this.connect();
     if (!this.sessionId) throw new Error("No session to reconcile");
-    const events = await this.readHistory(this.sessionId);
+    const events = await readHistory(this.transport, this.sessionId);
     for (const event of events)
       if (event.correlationId) this.submitted.add(event.correlationId);
     const index =
@@ -211,37 +210,9 @@ export class ProtocolAdapter implements HarnessAdapter {
     this.ready = true;
     return events.slice(index + 1);
   }
-  private async readHistory(sessionId: string): Promise<AdapterEvent[]> {
-    let cursor: string | undefined;
-    const turns = [];
-    do {
-      const page = turnList.parse(
-        await this.transport.call("thread/turns/list", {
-          threadId: sessionId,
-          limit: 100,
-          itemsView: "full",
-          sortDirection: "asc",
-          ...(cursor ? { cursor } : {}),
-        }),
-      );
-      turns.push(...page.data);
-      cursor = page.nextCursor ?? undefined;
-    } while (cursor);
-    return turns.flatMap((turn) => historyEvents(sessionId, turn));
-  }
   async pendingState(): Promise<"none" | "some" | "unknown"> {
     if (!this.connected || !this.sessionId) return "unknown";
-    const parsed = pendingStatus.safeParse(
-      await this.transport.call("thread/read", {
-        threadId: this.sessionId,
-        includeTurns: false,
-      }),
-    );
-    if (!parsed.success) return "unknown";
-    const status = parsed.data.thread.status;
-    if (status.type === "idle") return "none";
-    if (status.type !== "active") return "unknown";
-    return status.activeFlags.length > 0 ? "some" : "none";
+    return readPendingState(this.transport, this.sessionId);
   }
   async commandExec(
     command: string[],

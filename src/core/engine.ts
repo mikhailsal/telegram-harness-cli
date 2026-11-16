@@ -1,4 +1,3 @@
-import { SteerRejectedError } from "../adapters/contract.js";
 import { catalog } from "../channels/index.js";
 import type { ChannelEvent } from "../channels/index.js";
 import type { AdapterEvent } from "../adapters/contract.js";
@@ -8,22 +7,16 @@ import { Commands } from "./commands.js";
 import { confirmDeferredNew } from "./command-completions.js";
 import { TurnStatuses } from "./status.js";
 import { turnDraftId } from "./turn-draft.js";
-import { messageFormat } from "./format.js";
-import { recordExecution } from "./settings-audit.js";
+import { steerTurn, submitTurn } from "./engine-submit.js";
 import type { CommandDelivery } from "./commands.js";
 import { AdapterEvents, activeTurn, queueRequestSummaries } from "./events.js";
-import {
-  recordReaction,
-  trackReaction,
-  acceptReaction,
-} from "./interactions.js";
+import { recordReaction } from "./interactions.js";
 import {
   collectMessages,
   consumeTurnInbox,
   decodeInbox,
   recordEvent,
   nextQueuedTurn,
-  turnText,
 } from "./queue.js";
 
 const transientEvents = new Set<AdapterEvent["kind"]>([
@@ -273,7 +266,7 @@ export class TurnEngine {
     if (await this.settleStopped(active)) return;
     if (active) {
       if (this.ctx.store.getCursor(`user-stop/${active.id}`) !== "1")
-        await this.steer(active);
+        await steerTurn(this.ctx, this.statuses, active);
       return;
     }
     if (this.ctx.store.getCursor("stop-pending") === "1")
@@ -281,9 +274,9 @@ export class TurnEngine {
     await confirmDeferredNew(this.ctx);
     const turn = nextQueuedTurn(this.ctx);
     if (turn) {
-      await this.submit(turn);
+      await submitTurn(this.ctx, this.statuses, turn);
       const started = activeTurn(this.ctx);
-      if (started) await this.steer(started);
+      if (started) await steerTurn(this.ctx, this.statuses, started);
     }
   }
   private async pendingSecretInterrupt(): Promise<boolean> {
@@ -300,89 +293,6 @@ export class TurnEngine {
       }
     }
     return false;
-  }
-  private async steer(active: Turn): Promise<void> {
-    const mode =
-      this.ctx.store.getCursor("followup-mode") ?? this.ctx.config.mode;
-    if (
-      mode !== "steer" ||
-      !active.externalTurnId ||
-      !this.ctx.adapter.steer ||
-      !this.ctx.adapter.capabilities.has("steer")
-    )
-      return;
-    const turn = nextQueuedTurn(this.ctx);
-    if (!turn) return;
-    trackReaction(this.ctx, turn.id);
-    const text = await turnText(this.ctx, turn);
-    this.ctx.store.setCursor(`followup-of/${turn.id}`, active.id);
-    if (
-      !this.ctx.store.transitionTurn(turn.id, "queued", "submitting", {
-        sessionId: this.ctx.sessionId,
-        updatedAt: this.ctx.now().toISOString(),
-      })
-    )
-      return;
-    try {
-      recordExecution(this.ctx, turn, "steer");
-      await this.ctx.adapter.steer(
-        { correlationId: turn.id, text },
-        active.externalTurnId,
-      );
-      this.ctx.store.transitionTurn(turn.id, "submitting", "active", {
-        externalTurnId: active.externalTurnId,
-        updatedAt: this.ctx.now().toISOString(),
-      });
-      consumeTurnInbox(this.ctx, turn.id);
-      acceptReaction(this.ctx, turn.id);
-      await this.statuses.acknowledge();
-    } catch (error) {
-      if (error instanceof SteerRejectedError) {
-        this.ctx.store.requeueRejectedSteer(
-          turn.id,
-          this.ctx.now().toISOString(),
-        );
-        return;
-      }
-      this.ctx.store.transitionTurn(turn.id, "submitting", "uncertain", {
-        updatedAt: this.ctx.now().toISOString(),
-      });
-    }
-  }
-  private async submit(turn: Turn): Promise<void> {
-    messageFormat(this.ctx, turn);
-    trackReaction(this.ctx, turn.id);
-    const text = await turnText(this.ctx, turn);
-    this.ctx.store.setCursor(`followup-of/${turn.id}`, "");
-    if (
-      !this.ctx.store.transitionTurn(turn.id, "queued", "submitting", {
-        sessionId: this.ctx.sessionId,
-        updatedAt: this.ctx.now().toISOString(),
-      })
-    )
-      return;
-    this.ctx.persistAdapter();
-    this.statuses.refresh();
-    try {
-      recordExecution(this.ctx, turn, "submit");
-      const result = await this.ctx.adapter.submit({
-        correlationId: turn.id,
-        text,
-      });
-      this.ctx.persistAdapter();
-      if (result.turnId)
-        this.ctx.store.transitionTurn(turn.id, "submitting", "active", {
-          externalTurnId: result.turnId,
-          updatedAt: this.ctx.now().toISOString(),
-        });
-      consumeTurnInbox(this.ctx, turn.id);
-      acceptReaction(this.ctx, turn.id);
-    } catch {
-      this.ctx.log("submit_uncertain", { code: "unconfirmed" });
-      this.ctx.store.transitionTurn(turn.id, "submitting", "uncertain", {
-        updatedAt: this.ctx.now().toISOString(),
-      });
-    }
   }
   close(): Promise<void> {
     return this.serial(async () => {
