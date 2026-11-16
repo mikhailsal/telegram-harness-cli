@@ -365,27 +365,4 @@ export class TelegramChannel {
       )
     ).message_id;
   }
-  async menu(): Promise<void> {
-    for (const scope of [undefined, { type: "all_private_chats" as const }])
-      for (const language of [undefined, "ru", "en"] as const) {
-        const strings = catalog[language ?? "en"];
-        await this.bot.api.setMyCommands(
-          (
-            [
-              "stop",
-              "status",
-              "new",
-              "mode",
-              "format",
-              "compact",
-              "help",
-            ] as const
-          ).map((command) => ({ command, description: strings[command] })),
-          {
-            ...(language ? { language_code: language } : {}),
-            ...(scope ? { scope } : {}),
-          },
-        );
-      }
-  }
 }

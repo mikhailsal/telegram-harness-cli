@@ -74,46 +74,21 @@ it("sends escaped approval and question cards with the intended buttons and soun
   expect(JSON.stringify(api.calls[0]?.body.reply_markup)).toContain("Да");
   expect(JSON.stringify(api.calls[1]?.body.reply_markup)).toContain('"A"');
 });
-it("exposes edit, deletion, callback, typing, draft and default plus localized menus", async () => {
+it("exposes edit, deletion, callback, typing and draft", async () => {
   const api = transport();
   await api.channel.edit("1", 10, "new");
   await api.channel.delete("1", 10);
   await api.channel.answerCallback("cb", "done");
   await api.channel.typing("1");
   await api.channel.draft(1, 2, "thinking");
-  await api.channel.menu();
   expect(api.calls.map((call) => call.method)).toEqual([
     "editMessageText",
     "deleteMessage",
     "answerCallbackQuery",
     "sendChatAction",
     "sendRichMessageDraft",
-    "setMyCommands",
-    "setMyCommands",
-    "setMyCommands",
-    "setMyCommands",
-    "setMyCommands",
-    "setMyCommands",
   ]);
   expect(api.calls[4]?.body.can_stop).toBe(true);
-  for (const call of api.calls.slice(-6))
-    expect(JSON.stringify(call.body.commands)).toContain('"command":"format"');
-  expect(api.calls.slice(-6).map((call) => call.body.language_code)).toEqual([
-    undefined,
-    "ru",
-    "en",
-    undefined,
-    "ru",
-    "en",
-  ]);
-  expect(api.calls.slice(-6).map((call) => call.body.scope)).toEqual([
-    undefined,
-    undefined,
-    undefined,
-    { type: "all_private_chats" },
-    { type: "all_private_chats" },
-    { type: "all_private_chats" },
-  ]);
 });
 it("pairs an animated thinking preview with rich final delivery and keeps its text literal", async () => {
   const api = transport();
