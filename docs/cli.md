@@ -11,7 +11,7 @@ A completed source build is reused on subsequent runs of that commit. The
 bootstrap requires network access even when a build is cached.
 
 Compatible Node/npm and an existing Codex executable are reused. Missing
-Node 24.22.0 and Codex 0.166.0 are installed in persistent per-user toolchain
+Node 24.22.0 and Codex 0.169.0 are installed in persistent per-user toolchain
 directories; existing Codex installations are not upgraded. Interactive setup
 starts native Codex login if authentication is needed.
 

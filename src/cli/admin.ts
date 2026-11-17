@@ -134,7 +134,7 @@ async function versionCheck(
   fixture: string;
   matches: boolean | null;
 }> {
-  const fixture = "0.166.0";
+  const fixture = "0.169.0";
   try {
     const result = await deps.exec(config.codex.executable, ["--version"], {
       cwd: directory,
