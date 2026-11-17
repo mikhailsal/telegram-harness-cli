@@ -36,6 +36,22 @@ describe("measured pane states", () => {
     ).toBe(false);
   });
 });
+it("reads Codex 0.169's footer with the agents hint before the shortcut hint", async () => {
+  const idle = await fixture("empty-0169");
+  expect(parsePane(idle)).toEqual({ kind: "empty" });
+  expect(
+    parsePane(idle.replace("› Ask Codex to do anything", "› owner text")),
+  ).toEqual({ kind: "composer", lines: ["owner text"] });
+  const busy = idle.replace(
+    "\n\n› Ask",
+    "\n\n• Working (5s • esc to interrupt)\n\n› Ask",
+  );
+  expect(parsePane(busy).kind).toBe("busy");
+  expect(isCleanBusyPane(busy)).toBe(true);
+  expect(
+    parsePane(idle.replace("· ? for shortcuts", "· other text")).kind,
+  ).not.toBe("empty");
+});
 it("identifies the current composer after completed history and ignores history lookalikes", async () => {
   const history = await fixture("completed-history");
   expect(parsePane(history)).toEqual({ kind: "empty" });
