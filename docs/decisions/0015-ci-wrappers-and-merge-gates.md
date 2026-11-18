@@ -106,8 +106,11 @@ Caches never carry trust from a pull request: jobs restore the cache of the
 default branch, and only a push to the default branch saves it. The coverage
 baseline of each lane is the `report.json` saved by that push.
 
-Every job installs PHP 8.4, the one runtime that bootstrap does not download
-([decision 0002](0002-installation-strategy.md)), and runs `quality
+The template's maintainer workflow installs PHP 8.4, the one runtime that
+bootstrap does not download ([decision 0002](0002-installation-strategy.md)).
+This repository has no PHP application, so its PHP helper is dormant
+([decision 0016](0016-template-lifecycle.md)) and its jobs install no PHP; a
+candidate that changes the helper fails for the missing runtime. Every job runs `quality
 bootstrap`, because only bootstrap downloads, including the core's uv
 ([decision 0010](0010-launcher-bootstrap-and-hooks.md#launcher)). The jobs
 of both lanes also lift the AppArmor restriction of Ubuntu 24.04 on
