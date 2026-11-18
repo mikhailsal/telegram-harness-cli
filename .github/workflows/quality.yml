@@ -25,14 +25,15 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Install the PHP runtime (decision 0002)
+      # No PHP runtime: this repository has no PHP application, so the PHP profile
+      # is inactive unless a candidate changes tools/quality/helpers/php (decision
+      # 0016), and the gate then fails because PHP is missing (#14).
+      - name: Install ShellCheck
         run: |
-          sudo add-apt-repository --yes ppa:ondrej/php
-          sudo apt-get update
-          sudo apt-get install --yes shellcheck php8.4-cli php8.4-xml php8.4-mbstring php8.4-zip \
-            php8.4-xdebug php8.4-pcov
-          sudo phpdismod -v 8.4 -s ALL xdebug pcov
-          sudo update-alternatives --set php /usr/bin/php8.4
+          if ! command -v shellcheck >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install --yes shellcheck
+          fi
       - name: Allow the network isolation of the test suites (decision 0015)
         # Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor; every
         # suite runs in one without network access, or the gate warns (tests.network).
@@ -115,14 +116,6 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Install the PHP runtime (decision 0002)
-        run: |
-          sudo add-apt-repository --yes ppa:ondrej/php
-          sudo apt-get update
-          sudo apt-get install --yes php8.4-cli php8.4-xml php8.4-mbstring php8.4-zip \
-            php8.4-xdebug php8.4-pcov
-          sudo phpdismod -v 8.4 -s ALL xdebug pcov
-          sudo update-alternatives --set php /usr/bin/php8.4
       - name: Allow the network isolation of the test suites (decision 0015)
         # Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor; every
         # suite runs in one without network access, or the gate warns (tests.network).
@@ -193,14 +186,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install the PHP runtime (decision 0002)
-        run: |
-          sudo add-apt-repository --yes ppa:ondrej/php
-          sudo apt-get update
-          sudo apt-get install --yes php8.4-cli php8.4-xml php8.4-mbstring php8.4-zip \
-            php8.4-xdebug php8.4-pcov
-          sudo phpdismod -v 8.4 -s ALL xdebug pcov
-          sudo update-alternatives --set php /usr/bin/php8.4
       - name: Restore the download cache of the default branch
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -224,14 +209,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install the PHP runtime (decision 0002)
-        run: |
-          sudo add-apt-repository --yes ppa:ondrej/php
-          sudo apt-get update
-          sudo apt-get install --yes php8.4-cli php8.4-xml php8.4-mbstring php8.4-zip \
-            php8.4-xdebug php8.4-pcov
-          sudo phpdismod -v 8.4 -s ALL xdebug pcov
-          sudo update-alternatives --set php /usr/bin/php8.4
       - name: Restore the download cache of the default branch
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
