@@ -5,9 +5,10 @@ Codex is the first supported harness. The bridge owns its queue, delivered
 history and recovery state; the agent answers normally.
 
 Two Codex adapters are available: the shared app-server protocol and a
-guarded tmux runner. Their measured compatibility baseline is Codex CLI
-0.166.0. See the [protocol](docs/spikes/codex-two-clients.md) and
-[tmux](docs/spikes/codex-tmux-input.md) experiments.
+guarded tmux runner. Both were first measured on Codex CLI 0.166.0 in the
+[protocol](docs/spikes/codex-two-clients.md) and
+[tmux](docs/spikes/codex-tmux-input.md) experiments. The tested baseline is now
+0.169.0, which `/model` needs and the live acceptance passes on.
 
 The tmux runner disables Codex's interactive startup update check for its
 owned sessions. Manage Codex versions outside those sessions and use `thc doctor`

@@ -3,6 +3,21 @@
 All notable changes to `thc` are listed here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.1] - 2026-11-17
+
+### Fixed
+
+- The tmux runner works with Codex 0.169.0. That version adds a hint line
+  under the status line, and the runner took it for typed text, so every
+  message failed with "Codex is not accepting input".
+
+### Changed
+
+- The tested Codex version is now 0.169.0, the version `/model` needs and the
+  live acceptance passes on. `thc doctor` compares against it, and the
+  installer installs it when Codex is missing. An existing Codex is still not
+  upgraded.
+
 ## [0.1.0] - 2026-11-16
 
 The first versioned release.

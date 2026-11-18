@@ -21,20 +21,23 @@ function isBusyStatus(line: string): boolean {
     line,
   );
 }
+// The key hint under the footer: "? for shortcuts", which Codex 0.169 prefixes
+// with other hints such as "← for agents · ".
+function isShortcutHint(line: string): boolean {
+  return /^ {2}(?:\S.* · )?\? for shortcuts/u.test(line);
+}
 function currentFrame(
   lines: string[],
 ): { start: number; footer: number } | undefined {
   const footer = lines.findLastIndex(
     (line) =>
       /^ {2}.+ · /u.test(line) &&
-      !/^ {2}\? for shortcuts/u.test(line) &&
+      !isShortcutHint(line) &&
       !line.includes("enter select · esc back"),
   );
   if (
     footer < 0 ||
-    lines
-      .slice(footer + 1)
-      .some((line) => line !== "" && !/^ {2}\? for shortcuts/u.test(line))
+    lines.slice(footer + 1).some((line) => line !== "" && !isShortcutHint(line))
   )
     return undefined;
   const start = lines.findLastIndex(

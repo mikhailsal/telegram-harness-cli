@@ -202,7 +202,7 @@ function preparePrivateNode(): { archive: string; checksum: string } {
     join(nodeDir, "npm"),
     `#!/bin/bash
 set -e
-if [[ "$1" == install && "$2" == --global && "$3" == --prefix && "$5" == @openai/codex@0.166.0 ]]; then
+if [[ "$1" == install && "$2" == --global && "$3" == --prefix && "$5" == @openai/codex@0.169.0 ]]; then
   mkdir -p "$4/bin"
   printf '#!/bin/bash\nexit 0\n' > "$4/bin/codex"
   chmod +x "$4/bin/codex"
@@ -263,7 +263,7 @@ it("verifies and installs private Node and missing Codex", () => {
         "share",
         "thc",
         "toolchains",
-        "codex-0.166.0",
+        "codex-0.169.0",
         "bin",
         "codex",
       ),
