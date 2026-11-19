@@ -8,6 +8,10 @@ import type { RuntimeContext } from "../../src/core/context.ts";
 import type { startBridge as startBridgeType } from "../../src/core/runtime.ts";
 import type { openAdapter as openAdapterType } from "../../src/core/adapter.ts";
 import type { CodexTmuxAdapter } from "../../src/adapters/codex-tmux/index.ts";
+import type {
+  HarnessAdapter,
+  HarnessSettings,
+} from "../../src/adapters/contract.ts";
 import { FakeServices } from "../fakes/servers.ts";
 import { inspect, openHistory, turnFor, waitFor } from "./live-runtime.ts";
 import type { LiveState, LiveHistory, RunnerState } from "./live-runtime.ts";
@@ -84,13 +88,34 @@ function descriptorReady(
         parsed.data.descriptor?.rolloutPath && parsed.data.descriptor.threadId,
       );
 }
-function runner(
-  root: string,
-  config: Config,
-  server: FakeServices,
-  runtime: RuntimeModules,
-  owned: Map<string, CodexTmuxAdapter>,
-): Running {
+/**
+ * Pins the model and effort of the run, so that acceptance does not depend on
+ * the Codex defaults of whoever runs it: tmux starts Codex with them, the
+ * protocol adapter sends them with every turn.
+ */
+export function pinSettings(
+  adapter: HarnessAdapter,
+  settings: HarnessSettings,
+  tmux: typeof CodexTmuxAdapter,
+): void {
+  if (adapter instanceof tmux) {
+    adapter.options.settings = settings;
+    return;
+  }
+  const submit = adapter.submit.bind(adapter);
+  adapter.submit = (input) =>
+    submit({ ...input, settings: { ...settings, ...input.settings } });
+}
+interface Launch {
+  root: string;
+  config: Config;
+  server: FakeServices;
+  runtime: RuntimeModules;
+  owned: Map<string, CodexTmuxAdapter>;
+  settings: HarnessSettings;
+}
+function runner(launch: Launch): Running {
+  const { root, config, server, runtime, owned } = launch;
   const controller = new AbortController(),
     state: RunnerState = {};
   const run = runtime
@@ -106,6 +131,7 @@ function runner(
         );
         if (adapter instanceof runtime.TmuxAdapter)
           owned.set(adapter.server, adapter);
+        pinSettings(adapter, launch.settings, runtime.TmuxAdapter);
         state.attached = true;
         return adapter;
       },
@@ -213,6 +239,7 @@ export async function setup(
   resources: Resources,
   buildRoot: string,
   adapter: "protocol" | "tmux",
+  settings: HarnessSettings,
 ): Promise<LiveEnvironment> {
   const server = new FakeServices();
   resources.server = server;
@@ -221,7 +248,14 @@ export async function setup(
   const runtime = await loadRuntime(buildRoot);
   const config = liveConfig(runtime, adapter);
   const start = () =>
-    runner(resources.root, config, server, runtime, resources.owned);
+    runner({
+      root: resources.root,
+      config,
+      server,
+      runtime,
+      owned: resources.owned,
+      settings,
+    });
   const { firstMarker, secondMarker, permissionMarker } = markers();
   const barrier = join(resources.root, "release-first-turn");
   resources.barrier = barrier;

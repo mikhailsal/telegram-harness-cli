@@ -1,13 +1,33 @@
 import { execFile as execFileCallback, spawn } from "node:child_process";
 import { readFile, realpath } from "node:fs/promises";
 import { promisify } from "node:util";
+import type { HarnessSettings } from "../contract.ts";
 
 const execFile = promisify(execFileCallback);
+/** Launch-time `-c` overrides; a JSON string is also a valid TOML string. */
+function settingsArguments(settings: HarnessSettings): string[] {
+  return [
+    ...(settings.model
+      ? ["-c", `model=${JSON.stringify(settings.model)}`]
+      : []),
+    ...(settings.effort
+      ? ["-c", `model_reasoning_effort=${JSON.stringify(settings.effort)}`]
+      : []),
+  ];
+}
 export interface PaneIdentity {
   paneId: string;
   pid: string;
   executable: string;
   startTime: string;
+}
+export interface Launch {
+  cwd: string;
+  home: string;
+  executable: string;
+  sandbox: string;
+  originator: string;
+  settings?: HarnessSettings | undefined;
 }
 export class TmuxRunner {
   readonly server: string;
@@ -20,13 +40,8 @@ export class TmuxRunner {
     });
     return stdout;
   }
-  async start(
-    cwd: string,
-    home: string,
-    executable: string,
-    sandbox: string,
-    originator: string,
-  ): Promise<PaneIdentity> {
+  async start(launch: Launch): Promise<PaneIdentity> {
+    const { cwd, home, executable, sandbox, originator } = launch;
     await this.run(
       "new-session",
       "-d",
@@ -50,6 +65,7 @@ export class TmuxRunner {
       "never",
       "-s",
       sandbox,
+      ...settingsArguments(launch.settings ?? {}),
     );
     return this.identify(executable);
   }

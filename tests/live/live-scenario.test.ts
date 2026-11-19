@@ -6,7 +6,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { restartMidTurn } from "./live-scenario.ts";
-import { cleanup, waitForHistory } from "./live-setup.ts";
+import { cleanup, pinSettings, waitForHistory } from "./live-setup.ts";
+import type { CodexTmuxAdapter } from "../../src/adapters/codex-tmux/index.ts";
+import type {
+  AdapterInput,
+  HarnessAdapter,
+} from "../../src/adapters/contract.ts";
 
 function fakeHistory(finishAt: number, barrier: string) {
   let reads = 0;
@@ -172,4 +177,36 @@ test("requires the shell command to remain active after the new bridge attaches"
   } finally {
     await f.close();
   }
+});
+
+test("pins the run's model and effort on both adapters", async () => {
+  class FakeTmux {
+    options: { settings?: object } = {};
+  }
+  const tmuxClass = FakeTmux as unknown as typeof CodexTmuxAdapter;
+  const tmux = new FakeTmux();
+  pinSettings(tmux as unknown as HarnessAdapter, { effort: "low" }, tmuxClass);
+  assert.deepEqual(tmux.options.settings, { effort: "low" });
+
+  const sent: AdapterInput[] = [];
+  const protocol = {
+    submit(input: AdapterInput) {
+      sent.push(input);
+      return Promise.resolve({});
+    },
+  } as unknown as HarnessAdapter;
+  pinSettings(protocol, { model: "gpt-test", effort: "low" }, tmuxClass);
+  await protocol.submit({ correlationId: "a", text: "one" });
+  await protocol.submit({
+    correlationId: "b",
+    text: "two",
+    settings: { effort: "high" },
+  });
+  assert.deepEqual(
+    sent.map((input) => input.settings),
+    [
+      { model: "gpt-test", effort: "low" },
+      { model: "gpt-test", effort: "high" },
+    ],
+  );
 });

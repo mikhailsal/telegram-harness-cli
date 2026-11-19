@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
+import type { HarnessSettings } from "../../src/adapters/contract.ts";
 import type { Turn, TurnStatus } from "../../src/store/index.ts";
 import {
   approvalCallback,
@@ -222,12 +223,13 @@ async function exercise(
 export async function acceptance(
   adapter: "protocol" | "tmux",
   buildRoot: string,
+  settings: HarnessSettings,
 ): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), "thc-live-"));
   const resources: Resources = { root, owned: new Map(), started: false };
   try {
     await mkdir(join(root, ".thc"));
-    const env = await setup(resources, buildRoot, adapter);
+    const env = await setup(resources, buildRoot, adapter, settings);
     await exercise(env, resources, buildRoot);
   } catch (error) {
     try {

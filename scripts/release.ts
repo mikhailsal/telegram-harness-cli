@@ -30,6 +30,9 @@ export interface LiveRecord extends Omit<RecordContext, "now"> {
   adapters: Partial<Record<"protocol" | "tmux", string>>;
   result: string;
   dirty: boolean;
+  /** The pinned model ("default" for Codex's own) and reasoning effort. */
+  model?: string;
+  effort?: string;
 }
 function git(args: string[], input?: string, cwd?: string): string {
   const result = spawnSync("git", args, {

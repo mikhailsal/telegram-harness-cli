@@ -178,42 +178,6 @@ control = ["ci/**"]
 blocking_score = 7.0
 unscored = "error"
 
-# picomatch <= 4.0.7 (GHSA-fc5q-39xc-vjpf, CVSS 8.7): a ReDoS through crafted extglob
-# patterns, with no patched release yet. Every use below is development tooling that
-# matches globs written in this repository, never untrusted input. Drop each entry
-# once a fixed picomatch is published and locked.
-[[exceptions]]
-rule = "dependencies.vulnerable"
-path = "package-lock.json"
-symbol = "GHSA-fc5q-39xc-vjpf"
-reason = "No fixed picomatch exists; it is used only by vitest, vite and tinyglobby, which match repository-controlled globs at test time; `npm ls --omit=dev picomatch` is empty, so thc never loads it."
-owner = "telegram-harness-cli maintainers"
-review = 2027-01-18
-
-[[exceptions]]
-rule = "dependencies.vulnerable"
-path = "examples/web/package-lock.json"
-symbol = "GHSA-fc5q-39xc-vjpf"
-reason = "No fixed picomatch exists; it is used only by the dormant reference app's Vite and test tooling, which match repository-controlled globs at build and test time."
-owner = "telegram-harness-cli maintainers"
-review = 2027-01-18
-
-[[exceptions]]
-rule = "dependencies.vulnerable"
-path = "tools/quality/helpers/typescript/package-lock.json"
-symbol = "GHSA-fc5q-39xc-vjpf"
-reason = "No fixed picomatch exists; it is used only by the vendored TypeScript helper's tooling, which matches globs from the policy."
-owner = "telegram-harness-cli maintainers"
-review = 2027-01-18
-
-[[exceptions]]
-rule = "dependencies.vulnerable"
-path = "tools/quality/src/quality/testkit/browserseed/package-lock.json"
-symbol = "GHSA-fc5q-39xc-vjpf"
-reason = "No fixed picomatch exists; it is used only by the vendored browser test seed's Vite tooling, which matches repository-controlled globs."
-owner = "telegram-harness-cli maintainers"
-review = 2027-01-18
-
 [[classification]]
 pattern = "quality"
 category = "config"

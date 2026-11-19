@@ -74,13 +74,13 @@ beforeEach(() => {
 it("starts an owned pane without update prompts and with explicit sandbox", async () => {
   const runner = new TmuxRunner("thc-owned");
   expect(
-    await runner.start(
-      "/work",
-      "/home",
-      "/bin/codex",
-      "read-only",
-      "thc-marker",
-    ),
+    await runner.start({
+      cwd: "/work",
+      home: "/home",
+      executable: "/bin/codex",
+      sandbox: "read-only",
+      originator: "thc-marker",
+    }),
   ).toEqual(identity);
   expect(state.calls[0]).toEqual([
     "-L",
@@ -107,6 +107,36 @@ it("starts an owned pane without update prompts and with explicit sandbox", asyn
     "never",
     "-s",
     "read-only",
+  ]);
+});
+it("starts Codex with the requested model and effort as config overrides", async () => {
+  const launch = {
+    cwd: "/work",
+    home: "/home",
+    executable: "/bin/codex",
+    sandbox: "read-only",
+    originator: "thc-marker",
+  };
+  await new TmuxRunner("thc-owned").start({
+    ...launch,
+    settings: { model: "gpt-test", effort: "low" },
+  });
+  expect(state.calls[0]?.slice(-4)).toEqual([
+    "-c",
+    'model="gpt-test"',
+    "-c",
+    'model_reasoning_effort="low"',
+  ]);
+  state.calls = [];
+  await new TmuxRunner("thc-owned").start({
+    ...launch,
+    settings: { effort: "low" },
+  });
+  expect(state.calls[0]?.slice(-4)).toEqual([
+    "-s",
+    "read-only",
+    "-c",
+    'model_reasoning_effort="low"',
   ]);
 });
 it("refuses a replaced pane, executable, and reused pid before input", async () => {
