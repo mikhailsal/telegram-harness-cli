@@ -119,4 +119,4 @@ rendering and buttons.
 
 All project and imported tooling documentation is listed in the
 [documentation index](docs/README.md). Release notes are in the
-[changelog](CHANGELOG.md).
+[changelog](CHANGELOG.md); deferred work is listed in [TODOS](TODOS.md).
