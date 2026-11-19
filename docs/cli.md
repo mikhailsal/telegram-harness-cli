@@ -129,7 +129,8 @@ signals only the process that owns the folder lock and waits up to 15 seconds
 for it to exit, so `thc stop && thc init` is safe; if the bridge is still
 running after that, it fails with `E_ALREADY_RUNNING`. systemd can keep the
 unit stopping, for up to 90 seconds by default, while it waits for the unit's
-other processes; `thc init` reports that wait before it starts the service again. As a systemd user service the bridge
+other processes; `thc init` reports that wait before it starts the service
+again. As a systemd user service the bridge
 starts the Codex daemon in its own transient scope, so `thc stop` and bridge
 restarts neither stop Codex nor interrupt its running task; to interrupt the
 task itself, send `/stop` in Telegram. A daemon started by an older bridge
