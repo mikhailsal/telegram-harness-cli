@@ -9,6 +9,7 @@ import type {
   AdapterInput,
   AdapterSession,
   HarnessAdapter,
+  HarnessSettings,
 } from "../contract.ts";
 import { matchingRollout, rolloutIdentity, rolloutPaths } from "./files.ts";
 import { isCleanBusyPane, isExpectedPaste, parsePane } from "./pane.ts";
@@ -41,6 +42,8 @@ export interface TmuxOptions {
   persistSubmission: (submission: PendingSubmission) => Promise<void>;
   ackTimeoutMs?: number;
   pollMs?: number;
+  /** Model and effort a new session starts with; unset keeps Codex's config. */
+  settings?: HarnessSettings;
 }
 export class SubmitUncertainError extends Error {
   constructor() {
@@ -98,13 +101,14 @@ export class CodexTmuxAdapter implements HarnessAdapter {
     this.localId = randomUUID();
     this.originator = `thc-${randomUUID()}`;
     this.startedAt = Date.now();
-    this.identity = await this.runner.start(
-      this.cwd,
-      this.options.codexHome,
-      this.options.executable,
-      this.options.sandbox,
-      this.originator,
-    );
+    this.identity = await this.runner.start({
+      cwd: this.cwd,
+      home: this.options.codexHome,
+      executable: this.options.executable,
+      sandbox: this.options.sandbox,
+      originator: this.originator,
+      settings: this.options.settings,
+    });
     this.running = true;
     return { id: this.localId, cursor: "0" };
   }

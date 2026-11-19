@@ -10,6 +10,9 @@ All notable changes to `thc` are listed here. Versions follow
 - The tmux runner works with Codex 0.169.0. That version adds a hint line
   under the status line, and the runner took it for typed text, so every
   message failed with "Codex is not accepting input".
+- The tmux runner also reads the composer when Codex shows a notice count
+  ("1 warning · f2 to view") under the status line, for example near the
+  weekly usage limit. Messages failed the same way.
 
 ### Changed
 
@@ -17,6 +20,9 @@ All notable changes to `thc` are listed here. Versions follow
   live acceptance passes on. `thc doctor` compares against it, and the
   installer installs it when Codex is missing. An existing Codex is still not
   upgraded.
+- `npm run test:live` pins its reasoning effort to `low` and takes
+  `--effort <level>` and `--model <id>`, so release acceptance no longer
+  depends on the Codex defaults of the machine it runs on.
 
 ## [0.1.0] - 2026-11-16
 

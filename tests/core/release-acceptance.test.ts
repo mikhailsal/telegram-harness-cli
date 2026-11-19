@@ -1,6 +1,7 @@
 import { join, resolve } from "node:path";
 import { expect, it, vi } from "vitest";
 import {
+  liveOptions,
   newRecord,
   runAcceptance,
   runLive,
@@ -51,16 +52,21 @@ it("accepts only both adapters against the unchanged isolated artifact", async (
   const record = newRecord();
   const ops = acceptanceOperations();
   const adapters: string[] = [];
+  const pinned: unknown[] = [];
   ops.scenario = () =>
     Promise.resolve({
-      acceptance: (adapter) => {
+      acceptance: (adapter, _root, settings) => {
         adapters.push(adapter);
+        pinned.push(settings);
         return Promise.resolve();
       },
     });
   await runAcceptance(record, {}, ["node", "script"], ops);
+  expect(pinned).toEqual([{ effort: "low" }, { effort: "low" }]);
   expect(record).toMatchObject({
     result: "passed",
+    model: "default",
+    effort: "low",
     dirty: false,
     fingerprint: "source",
     artifact: "artifact",
@@ -70,6 +76,24 @@ it("accepts only both adapters against the unchanged isolated artifact", async (
   const dirty = newRecord();
   await runAcceptance(dirty, {}, ["node", "script", "--allow-dirty"], ops);
   expect(dirty.dirty).toBe(true);
+});
+
+it("pins a low effort unless the run names a model or an effort", () => {
+  const args = (...rest: string[]) => liveOptions(["node", "script", ...rest]);
+  expect(args()).toEqual({ allowDirty: false, settings: { effort: "low" } });
+  expect(
+    args("--model", "gpt-test", "--allow-dirty", "--effort", "high"),
+  ).toEqual({
+    allowDirty: true,
+    settings: { model: "gpt-test", effort: "high" },
+  });
+  for (const bad of [
+    ["--model"],
+    ["--effort", "--allow-dirty"],
+    ["--model", 'x"y'],
+    ["--speed", "fast"],
+  ])
+    expect(() => args(...bad)).toThrow("Usage");
 });
 
 it("rejects changed sources, artifact, dirty trees, and failed adapters", async () => {

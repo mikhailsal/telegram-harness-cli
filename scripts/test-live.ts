@@ -33,7 +33,15 @@ export function newRecord(): LiveRecord {
     npm: "",
   };
 }
-type Acceptance = (adapter: "protocol" | "tmux", root: string) => Promise<void>;
+export interface LiveSettings {
+  model?: string;
+  effort: string;
+}
+type Acceptance = (
+  adapter: "protocol" | "tmux",
+  root: string,
+  settings: LiveSettings,
+) => Promise<void>;
 export async function checkedScenario(
   root: string,
 ): Promise<{ acceptance: Acceptance }> {
@@ -101,11 +109,34 @@ function operations(): AcceptanceOperations {
     packageFile: () => readFile("package.json", "utf8"),
   };
 }
-function allowDirtyRun(args: string[]): boolean {
-  const allowed = args.slice(2).length === 1 && args[2] === "--allow-dirty";
-  if (args.length > 2 && !allowed)
-    throw new Error("Usage: npm run test:live -- [--allow-dirty]");
-  return allowed;
+const usage =
+  "Usage: npm run test:live -- [--allow-dirty] [--model <id>] [--effort <level>]";
+/**
+ * The run pins its reasoning effort (low unless given) and, on request, its
+ * model, so that the result does not depend on the Codex defaults of whoever
+ * runs it.
+ */
+export function liveOptions(args: string[]): {
+  allowDirty: boolean;
+  settings: LiveSettings;
+} {
+  const options = { allowDirty: false, settings: { effort: "low" } };
+  const settings: LiveSettings = options.settings;
+  const rest = args.slice(2);
+  while (rest.length) {
+    const flag = rest.shift();
+    if (flag === "--allow-dirty") {
+      options.allowDirty = true;
+      continue;
+    }
+    const value = rest.shift();
+    if (!value || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value))
+      throw new Error(usage);
+    if (flag === "--model") settings.model = value;
+    else if (flag === "--effort") settings.effort = value;
+    else throw new Error(usage);
+  }
+  return options;
 }
 async function packageVersion(ops: AcceptanceOperations): Promise<string> {
   const pkg: unknown = JSON.parse(await ops.packageFile());
@@ -136,7 +167,9 @@ export async function runAcceptance(
   args: string[] = process.argv,
   ops: AcceptanceOperations = operations(),
 ): Promise<void> {
-  const allowDirty = allowDirtyRun(args);
+  const { allowDirty, settings } = liveOptions(args);
+  record.model = settings.model ?? "default";
+  record.effort = settings.effort;
   record.head = ops.command("git", ["rev-parse", "HEAD"]);
   record.tree = ops.command("git", ["rev-parse", "HEAD^{tree}"]);
   const dirty = Boolean(
@@ -162,7 +195,7 @@ export async function runAcceptance(
   const { acceptance } = await ops.scenario(state.build.root);
   verifyCompletion(record, state.build, ops);
   for (const adapter of ["protocol", "tmux"] as const) {
-    await acceptance(adapter, state.build.root);
+    await acceptance(adapter, state.build.root, settings);
     record.adapters[adapter] = "passed";
   }
   verifyCompletion(record, state.build, ops);

@@ -17,11 +17,16 @@ command, a running Codex daemon and `tmux`. It copies the Git-enumerated build
 inputs into a temporary directory, installs the locked dependencies with
 `npm ci`, and builds there. It creates a separate temporary workspace and a new session
 for each adapter, and sends a small synthetic prompt through a localhost fake
-Bot API to each real adapter. It uses the normal configured Codex model and
-login; it never sends a request to Telegram. The command fails if prerequisites
+Bot API to each real adapter. It uses the normal Codex login and never sends a
+request to Telegram. The run pins its reasoning effort to `low`, so that a slow
+personal default (for example `xhigh`) cannot time out its steps, which wait 120
+seconds each. It keeps the configured Codex model. `--effort <level>` and
+`--model <id>` choose others: the tmux adapter starts Codex with them as `-c`
+overrides, and the protocol adapter sends them with every turn. The command fails if prerequisites
 or either acceptance run fail. It writes `.quality/test-live.json` with the
 result, timestamp, commit, tree, worktree fingerprint, package version, Codex
-version and adapter results. Schema 2 also records the Node and npm versions and
+version, the pinned model (`default` for the configured one) and effort, and
+adapter results. Schema 2 also records the Node and npm versions and
 a digest of the built package files and installed dependencies. The source and
 artifact digests are checked again after the runs. Failed or partial records cannot authorize a release. The temporary
 workspace is removed after each run; the new Codex sessions follow the normal

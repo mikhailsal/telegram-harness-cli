@@ -52,6 +52,26 @@ it("reads Codex 0.169's footer with the agents hint before the shortcut hint", a
     parsePane(idle.replace("· ? for shortcuts", "· other text")).kind,
   ).not.toBe("empty");
 });
+// Regression: with text in the composer, Codex 0.169 shows its notice count
+// alone under the footer, and the runner refused every later message with
+// "Codex is not accepting input". Found by live acceptance on 2026-11-19.
+it("reads the composer when a notice count stands under the footer", async () => {
+  expect(parsePane(await fixture("empty-warning-0169"))).toEqual({
+    kind: "empty",
+  });
+  const pasted = await fixture("pasted-warning-0169");
+  expect(pasted).toMatch(/\n +⚠ 1 warning · f2 to view\n/u);
+  expect(isExpectedPaste(parsePane(pasted), "b".repeat(1001))).toBe(true);
+  expect(parsePane(pasted.replace("⚠ 1 warning", "⚠ 12 warnings")).kind).toBe(
+    "composer",
+  );
+  expect(
+    isExpectedPaste(
+      parsePane(pasted.replace("· f2 to view", "· foreign text")),
+      "b".repeat(1001),
+    ),
+  ).toBe(false);
+});
 it("identifies the current composer after completed history and ignores history lookalikes", async () => {
   const history = await fixture("completed-history");
   expect(parsePane(history)).toEqual({ kind: "empty" });

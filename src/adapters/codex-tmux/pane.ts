@@ -26,18 +26,25 @@ function isBusyStatus(line: string): boolean {
 function isShortcutHint(line: string): boolean {
   return /^ {2}(?:\S.* · )?\? for shortcuts/u.test(line);
 }
+// Codex 0.169 counts its notices at the right edge of the same line. With
+// text in the composer the hint is gone and the count stands alone.
+function isNoticeCount(line: string): boolean {
+  return /^ +⚠ \d+ warnings? · f2 to view$/u.test(line);
+}
+const isBelowFooter = (line: string): boolean =>
+  isShortcutHint(line) || isNoticeCount(line);
 function currentFrame(
   lines: string[],
 ): { start: number; footer: number } | undefined {
   const footer = lines.findLastIndex(
     (line) =>
       /^ {2}.+ · /u.test(line) &&
-      !isShortcutHint(line) &&
+      !isBelowFooter(line) &&
       !line.includes("enter select · esc back"),
   );
   if (
     footer < 0 ||
-    lines.slice(footer + 1).some((line) => line !== "" && !isShortcutHint(line))
+    lines.slice(footer + 1).some((line) => line !== "" && !isBelowFooter(line))
   )
     return undefined;
   const start = lines.findLastIndex(
