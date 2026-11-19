@@ -35,9 +35,12 @@ concurrent capacity has not been load-tested.
 Rerunning plain `init` keeps the existing configuration and selected version.
 An active service or foreground bridge is left running; a stopped installation
 is resumed, and a resumed installation that has not delivered an answer yet
-waits for its first answer again. When the folder keeps a version whose
-database schema differs from the installer's, setup leaves the database
-untouched and skips that wait, so the kept version can still open it.
+waits for its first answer again. A service that systemd is still stopping
+counts as stopped, even while its bridge is shutting down: setup reports the
+wait and starts the service again when the stop finishes. When the folder
+keeps a version whose database schema differs from the installer's, setup
+leaves the database untouched and skips that wait, so the kept version can
+still open it.
 Use `--update` or `--to VERSION` explicitly
 to change versions. An explicit `--sandbox`, `--user-id` or `--token-file` that
 differs from the saved configuration is rejected with `E_CONFIG` instead of

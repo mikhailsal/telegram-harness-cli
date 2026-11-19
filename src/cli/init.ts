@@ -1,6 +1,5 @@
 import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { readLockOwner } from "../core/lock.js";
 import { Store } from "../store/index.js";
 import { writeAgentInstructions } from "./skill.js";
 import { doctor } from "./admin.js";
@@ -20,7 +19,7 @@ import {
 } from "./onboarding.js";
 import { withBotBinding } from "./bot-binding.js";
 import { withSetupLock } from "./setup-lock.js";
-import { configureUnit, isActive, isStopping } from "./service-unit.js";
+import { configureUnit, isRunning, isStopping } from "./service-unit.js";
 import {
   alreadyRunning,
   assertSettingsMatch,
@@ -200,11 +199,7 @@ async function enableService(
   restart: boolean,
   onboarding: Onboarding,
 ): Promise<void> {
-  if (
-    !restart &&
-    ((await isActive(directory, deps)) || (await readLockOwner(directory)))
-  )
-    return;
+  if (!restart && (await isRunning(directory, deps))) return;
   if (restart) {
     deps.stderr(`Stopping the bridge service. ${STOP_WAIT}\n`);
     await deps.exec("systemctl", ["--user", "stop", unit], { env: deps.env });
@@ -304,7 +299,7 @@ async function initialize(
     credentials.secret,
     deps.env,
     async () => {
-      if (prior && (await alreadyRunning(args, directory, deps, isActive))) {
+      if (prior && (await alreadyRunning(args, directory, deps, isRunning))) {
         deps.stdout(
           `Already initialized and running: ${directory}. Configuration edits take effect after thc stop and thc init.\n`,
         );
