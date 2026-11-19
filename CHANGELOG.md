@@ -10,6 +10,10 @@ All notable changes to `thc` are listed here. Versions follow
 - `thc init` and `thc init --update` say when they wait for systemd to stop
   the bridge service. systemd can take up to 90 seconds for that, and setup
   printed nothing meanwhile, so it looked hung.
+- `thc init` starts the service again when systemd is still stopping it and
+  the bridge has not exited yet. It used to print "Already initialized and
+  running" and leave the bridge stopped once the stop finished. A bridge
+  started in the foreground with `thc start` is still left alone.
 
 ## [0.1.1] - 2026-11-17
 

@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { run, type CliDependencies } from "../../src/cli/main.js";
+import { acquireDirectoryLock } from "../../src/core/lock.js";
 import { openStore, SCHEMA_VERSION } from "../../src/store/index.js";
 
 let directory: string;
@@ -175,6 +176,50 @@ it("announces the service stop of an update before it waits for systemd", async 
     order.findIndex((entry) => entry.startsWith("systemctl --user stop ")),
   );
   expect(order.join("\n")).not.toContain("still stopping");
+});
+
+// Regression: systemd was stopping a bridge that still held the folder lock;
+// plain init answered "Already initialized and running" and started nothing.
+// Value: protects=init waits for that stop and starts the service, and leaves a
+// foreground bridge alone; fails_when=init reports a stopping bridge as running,
+// or starts the service over a lock owner the unit does not own; why_new=no init
+// test held the lock while the unit was stopping; seam=none; no_claim=systemd is
+// not run (exec is faked; QA probed a real unit)
+function stoppingUnit(mainPid: number): (args: string[]) => Promise<string> {
+  return (args) => {
+    if (args.includes("is-active"))
+      return Promise.reject(new Error("Command failed"));
+    if (args.includes("MainPID"))
+      return Promise.resolve(
+        `MainPID=${String(mainPid)}\nActiveState=deactivating\n`,
+      );
+    return Promise.resolve(args.includes("show") ? "deactivating\n" : "ok");
+  };
+}
+
+it("starts the service once systemd has stopped the bridge that holds the lock", async () => {
+  expect(await run(initArgs("--no-start"), deps)).toBe(0);
+  const lease = await acquireDirectoryLock(directory);
+  try {
+    output = "";
+    const order = recordOrder(stoppingUnit(process.pid));
+    expect(await run(["init"], deps)).toBe(0);
+    expect(output).not.toContain("Already initialized and running");
+    const notice = order.findIndex((entry) =>
+      entry.startsWith("The bridge service is still stopping. systemd waits"),
+    );
+    expect(notice).toBeGreaterThan(-1);
+    expect(notice).toBeLessThan(
+      order.findIndex((entry) => entry.includes(" enable --now ")),
+    );
+    output = "";
+    const foreground = recordOrder(stoppingUnit(0));
+    expect(await run(["init"], deps)).toBe(0);
+    expect(output).toContain("Already initialized and running");
+    expect(foreground.join("\n")).not.toContain(" enable --now ");
+  } finally {
+    await lease.release();
+  }
 });
 
 it("leaves the store alone when the retained version uses an older schema", async () => {

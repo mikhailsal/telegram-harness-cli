@@ -1,7 +1,6 @@
 import { readFile, realpath } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import type { Config } from "../core/config.js";
-import { readLockOwner } from "../core/lock.js";
 import { openStore, readStoreIdentity } from "../store/index.js";
 import type { Arguments } from "./arguments.js";
 import { flag } from "./arguments.js";
@@ -47,7 +46,7 @@ export async function alreadyRunning(
   args: Arguments,
   directory: string,
   deps: CliDependencies,
-  active: (directory: string, deps: CliDependencies) => Promise<boolean>,
+  running: (directory: string, deps: CliDependencies) => Promise<boolean>,
 ): Promise<boolean> {
   if (
     args.flags.has("no-start") ||
@@ -56,9 +55,7 @@ export async function alreadyRunning(
     args.flags.has("force")
   )
     return false;
-  return (
-    (await active(directory, deps)) || Boolean(await readLockOwner(directory))
-  );
+  return running(directory, deps);
 }
 function sameTokenFile(
   token: Config["token"],

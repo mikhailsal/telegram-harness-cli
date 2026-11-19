@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { readLockOwner } from "../core/lock.js";
 import type { CliDependencies } from "./context.js";
 import { CliError } from "./errors.js";
 
@@ -24,7 +25,7 @@ function unitName(directory: string): string {
   const id = createHash("sha256").update(directory).digest("hex").slice(0, 24);
   return `thc-${id}.service`;
 }
-export async function isActive(
+async function isActive(
   directory: string,
   deps: CliDependencies,
 ): Promise<boolean> {
@@ -64,6 +65,54 @@ export async function isStopping(
   } catch {
     return false;
   }
+}
+// Whether systemd is stopping the unit and `pid` is its main process. That
+// bridge exits within the stop timeout and nothing starts it again. A stalled or
+// failed query means "no", so a live bridge still counts as running.
+async function isStoppingProcess(
+  directory: string,
+  deps: CliDependencies,
+  pid: number,
+): Promise<boolean> {
+  try {
+    const result = await deps.exec(
+      "systemctl",
+      [
+        "--user",
+        "show",
+        unitName(directory),
+        "--property",
+        "ActiveState",
+        "--property",
+        "MainPID",
+      ],
+      { env: deps.env, timeout: 5000 },
+    );
+    const lines = result.stdout.split("\n").map((line) => line.trim());
+    return (
+      lines.includes("ActiveState=deactivating") &&
+      lines.includes(`MainPID=${String(pid)}`)
+    );
+  } catch {
+    return false;
+  }
+}
+/**
+ * Whether a bridge serves this folder and keeps doing so: an active service,
+ * or a live lock owner such as a foreground `thc start`. A lock owner that
+ * systemd is already stopping does not count, so init starts the service once
+ * that stop finishes.
+ */
+export async function isRunning(
+  directory: string,
+  deps: CliDependencies,
+): Promise<boolean> {
+  if (await isActive(directory, deps)) return true;
+  const owner = await readLockOwner(directory);
+  return (
+    owner !== undefined &&
+    !(await isStoppingProcess(directory, deps, owner.pid))
+  );
 }
 // The service must find the managed `thc` shim, which the agent's instructions
 // call, even when the installing shell did not have its directory on PATH. It
