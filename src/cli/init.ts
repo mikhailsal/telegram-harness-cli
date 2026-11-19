@@ -191,7 +191,7 @@ async function checkLinger(
 }
 // systemd's default stop timeout; the unit thc writes does not change it.
 const STOP_WAIT =
-  "systemd waits up to 90 s for the service's processes to exit.";
+  "systemd waits up to 90 s by default for the service's processes to exit.";
 async function enableService(
   unit: string,
   directory: string,

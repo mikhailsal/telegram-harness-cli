@@ -6,8 +6,9 @@ import { isStopping } from "../../src/cli/service-unit.js";
 // it waited for systemctl in silence.
 // Value: protects=isStopping reads ActiveState and is true only for
 // "deactivating"; fails_when=another state counts as stopping, or a failed
-// query throws instead of meaning "not stopping"; why_new=no test covered the
-// unit state query; seam=none; no_claim=systemd is not run (exec is faked)
+// query throws instead of meaning "not stopping", or the query runs without
+// a timeout; why_new=no test covered the unit state query; seam=none;
+// no_claim=systemd is not run (exec is faked)
 
 function deps(exec: CliDependencies["exec"]): CliDependencies {
   return { env: {}, exec } as unknown as CliDependencies;
@@ -15,10 +16,12 @@ function deps(exec: CliDependencies["exec"]): CliDependencies {
 
 it("recognizes a unit that systemd is still stopping", async () => {
   const calls: string[] = [];
+  const timeouts: (number | undefined)[] = [];
   const stopping = await isStopping(
     "/srv/agent",
-    deps((file, args) => {
+    deps((file, args, options) => {
       calls.push([file, ...args].join(" "));
+      timeouts.push(options?.timeout);
       return Promise.resolve({ stdout: "deactivating\n", stderr: "" });
     }),
   );
@@ -27,6 +30,8 @@ it("recognizes a unit that systemd is still stopping", async () => {
   expect(calls[0]).toMatch(
     /^systemctl --user show thc-[0-9a-f]{24}\.service --property ActiveState --value$/,
   );
+  // The query is bounded, so a stalled systemctl cannot hold init.
+  expect(timeouts[0]).toBeGreaterThan(0);
 });
 
 it("treats every other state and a failed query as not stopping", async () => {
