@@ -121,6 +121,62 @@ it("restarts a project that already answered without repeating the onboarding", 
   expect(cursor("welcome-pending")).toBeFalsy();
 });
 
+// Regression: after `thc stop`, init blocked in systemctl for up to 90 s without
+// a word while systemd was still stopping the unit; it looked like a hang.
+// Value: protects=init reports the wait before the systemctl call that blocks;
+// fails_when=the notice is missing, comes after the call, or shows for a unit
+// that is not stopping; why_new=no test read stderr around the service start;
+// seam=none; no_claim=systemd is not run (exec is faked; QA probed a real unit)
+// Records the diagnostics and the systemctl calls in the order they happened,
+// for a project that already answered, so that init does not wait for an answer.
+function recordOrder(states: (args: string[]) => Promise<string>): string[] {
+  cursor("first-delivery-at", "2026-10-31T12:00:00.000Z");
+  const order: string[] = [];
+  deps.stderr = (text) => {
+    order.push(text.trim());
+  };
+  deps.exec = async (file, args) => {
+    order.push([file, ...args].join(" "));
+    return { stdout: await states(args), stderr: "" };
+  };
+  return order;
+}
+
+it("says that a stopped service is still stopping before it waits for systemd", async () => {
+  expect(await run(initArgs("--no-start"), deps)).toBe(0);
+  const order = recordOrder((args) =>
+    Promise.resolve(args.includes("show") ? "deactivating\n" : "ok"),
+  );
+  expect(await run(["init"], deps)).toBe(0);
+  const notice = order.findIndex((entry) =>
+    entry.startsWith("The bridge service is still stopping. systemd waits"),
+  );
+  expect(notice).toBeGreaterThan(-1);
+  expect(order[notice]).toContain("up to 90 s");
+  expect(notice).toBeLessThan(
+    order.findIndex((entry) => entry.includes(" enable --now ")),
+  );
+  expect(order.join("\n")).not.toContain("Stopping the bridge service");
+  const quiet = recordOrder(() => Promise.resolve("inactive\n"));
+  expect(await run(["init"], deps)).toBe(0);
+  expect(quiet.some((entry) => entry.includes(" enable --now "))).toBe(true);
+  expect(quiet.join("\n")).not.toMatch(/stopping/i);
+});
+
+it("announces the service stop of an update before it waits for systemd", async () => {
+  expect(await run(initArgs("--no-start"), deps)).toBe(0);
+  const order = recordOrder(() => Promise.resolve("ok"));
+  expect(await run(["init", "--update"], deps)).toBe(0);
+  const notice = order.findIndex((entry) =>
+    entry.startsWith("Stopping the bridge service. systemd waits up to 90 s"),
+  );
+  expect(notice).toBeGreaterThan(-1);
+  expect(notice).toBeLessThan(
+    order.findIndex((entry) => entry.startsWith("systemctl --user stop ")),
+  );
+  expect(order.join("\n")).not.toContain("still stopping");
+});
+
 it("leaves the store alone when the retained version uses an older schema", async () => {
   expect(await run(initArgs("--no-start"), deps)).toBe(0);
   const older = SCHEMA_VERSION - 1;
