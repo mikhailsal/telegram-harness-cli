@@ -3,6 +3,14 @@
 All notable changes to `thc` are listed here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- `thc init` and `thc init --update` say when they wait for systemd to stop
+  the bridge service. systemd can take up to 90 seconds for that, and setup
+  printed nothing meanwhile, so it looked hung.
+
 ## [0.1.1] - 2026-11-17
 
 ### Fixed

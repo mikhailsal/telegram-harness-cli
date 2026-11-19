@@ -20,7 +20,7 @@ import {
 } from "./onboarding.js";
 import { withBotBinding } from "./bot-binding.js";
 import { withSetupLock } from "./setup-lock.js";
-import { configureUnit, isActive } from "./service-unit.js";
+import { configureUnit, isActive, isStopping } from "./service-unit.js";
 import {
   alreadyRunning,
   assertSettingsMatch,
@@ -189,6 +189,9 @@ async function checkLinger(
     'User linger is not enabled or could not be checked; run: loginctl enable-linger "$USER"\n',
   );
 }
+// systemd's default stop timeout; the unit thc writes does not change it.
+const STOP_WAIT =
+  "systemd waits up to 90 s by default for the service's processes to exit.";
 async function enableService(
   unit: string,
   directory: string,
@@ -202,8 +205,11 @@ async function enableService(
     ((await isActive(directory, deps)) || (await readLockOwner(directory)))
   )
     return;
-  if (restart)
+  if (restart) {
+    deps.stderr(`Stopping the bridge service. ${STOP_WAIT}\n`);
     await deps.exec("systemctl", ["--user", "stop", unit], { env: deps.env });
+  } else if (await isStopping(directory, deps))
+    deps.stderr(`The bridge service is still stopping. ${STOP_WAIT}\n`);
   const start = new Date(deps.now()).toISOString();
   const firstRun = markFirstRun(directory, onboarding, start);
   await deps.exec("systemctl", ["--user", "daemon-reload"], { env: deps.env });

@@ -39,6 +39,32 @@ export async function isActive(
     return false;
   }
 }
+// A unit whose bridge has exited keeps stopping while systemd waits for its
+// other processes, and until then systemctl blocks a stop or a start of it.
+// The query only decides whether init prints a notice, so it is bounded and a
+// stalled or failed systemctl means "not stopping".
+export async function isStopping(
+  directory: string,
+  deps: CliDependencies,
+): Promise<boolean> {
+  try {
+    const result = await deps.exec(
+      "systemctl",
+      [
+        "--user",
+        "show",
+        unitName(directory),
+        "--property",
+        "ActiveState",
+        "--value",
+      ],
+      { env: deps.env, timeout: 5000 },
+    );
+    return result.stdout.trim() === "deactivating";
+  } catch {
+    return false;
+  }
+}
 // The service must find the managed `thc` shim, which the agent's instructions
 // call, even when the installing shell did not have its directory on PATH. It
 // goes last so that nothing in that user directory shadows the caller's tools.
