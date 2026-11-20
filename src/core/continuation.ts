@@ -6,7 +6,7 @@ import type { RuntimeContext } from "./context.js";
 // daemon restarts mid-task and resumes the work. Such a turn is not a terminal
 // task: it continues the Telegram turn that its rootTurnId names, so its answer
 // belongs under that user's message.
-function rootTurnId(event: AdapterEvent): string | undefined {
+export function rootTurnId(event: AdapterEvent): string | undefined {
   const data = event.data as { rootTurnId?: unknown } | undefined;
   return typeof data?.rootTurnId === "string" ? data.rootTurnId : undefined;
 }

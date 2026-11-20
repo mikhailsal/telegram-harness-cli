@@ -17,6 +17,7 @@ import { isCompactionOnly, observeCompaction } from "./compaction.js";
 import {
   continuedTurnId,
   linkContinuation,
+  rootTurnId,
   routingTurnId,
 } from "./continuation.js";
 import { noticeModelUnavailable } from "./harness-settings-notice.js";
@@ -94,14 +95,17 @@ export class AdapterEvents {
     if (!event.turnId) return this.findWithoutTurnId(event);
     const existing = this.findExternal(event.turnId);
     if (existing) return existing;
-    if (this.deferUnbound(event)) return;
+    // A turn that continues another one is never a submission's own turn, so
+    // it starts at once and leaves a deferred turn ID to its submission.
+    const continues = rootTurnId(event) !== undefined;
+    if (!continues && this.deferUnbound(event)) return;
     if (
       event.kind !== "turn-started" &&
       event.kind !== "input" &&
       event.kind !== "turn-completed"
     )
       return;
-    return this.externalTurn(event.turnId);
+    return this.externalTurn(event.turnId, continues);
   }
   private findWithoutTurnId(event: AdapterEvent): Turn | undefined {
     if (event.kind === "input" && !event.correlationId) {
@@ -143,8 +147,11 @@ export class AdapterEvents {
       ) ?? candidates[0]
     );
   }
-  private externalTurn(externalTurnId: string): Turn | undefined {
-    this.ctx.store.setCursor("unbound-turn", "");
+  private externalTurn(
+    externalTurnId: string,
+    keepUnbound = false,
+  ): Turn | undefined {
+    if (!keepUnbound) this.ctx.store.setCursor("unbound-turn", "");
     const found = activeTurn(this.ctx, externalTurnId);
     if (found) return found;
     const id = randomUUID();
