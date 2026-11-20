@@ -9,6 +9,7 @@ import { Store } from "../store/index.js";
 import { allowedFlags, flag, positive, type Arguments } from "./arguments.js";
 import type { CliDependencies } from "./context.js";
 import { CliError } from "./errors.js";
+import { serviceDirectory } from "./init-options.js";
 import { exists } from "./paths.js";
 import { redactSecrets } from "./secrets.js";
 import { requestServiceStop } from "./service-unit.js";
@@ -91,7 +92,8 @@ export async function stop(
     deps.stdout("Bridge is not running.\n");
     return;
   }
-  if (!(await requestServiceStop(directory, deps, owner.pid)))
+  const service = await serviceDirectory(directory);
+  if (!(await requestServiceStop(service, deps, owner.pid)))
     await stopDirectory(directory);
   deps.stdout("Stop requested.\n");
   // The next command may start the bridge again (thc stop && thc init); it must

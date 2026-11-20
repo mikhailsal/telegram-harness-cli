@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -7,16 +8,19 @@ import { afterEach, expect, it } from "vitest";
 import { stop } from "../../src/cli/admin.js";
 import { defaults, type CliDependencies } from "../../src/cli/context.js";
 import { requestServiceStop } from "../../src/cli/service-unit.js";
+import { Store } from "../../src/store/index.js";
 
 // Regression (#20): thc stop signalled a service-managed bridge directly, so
 // systemd kept the unit "active" while the bridge shut down, and a thc init in
 // that window answered "Already initialized and running"; the bot then stayed
 // stopped. Value: protects=thc stop asks systemd to stop a bridge that is the
-// unit's main process, signals it directly otherwise or when systemd cannot be
-// asked, signals it once, and waits only for the bridge it stopped;
-// fails_when=a service bridge is signalled directly, a foreground bridge goes
-// through systemctl, a failed systemctl leaves the bridge running, the bridge
-// gets a second SIGTERM, or a newly started bridge keeps thc stop waiting;
+// unit's main process, under the unit name thc init gave the folder, signals it
+// directly otherwise or when systemd cannot be asked, signals it once, and
+// waits only for the bridge it stopped; fails_when=a service bridge is
+// signalled directly (also when the folder is given through a symlink or keeps
+// a legacy symlinked name), a foreground bridge goes through systemctl, a
+// failed systemctl leaves the bridge running, the bridge gets a second
+// SIGTERM, or a newly started bridge keeps thc stop waiting;
 // why_new=stop.test.ts never consults systemd; seam=none; no_claim=systemd is
 // not run (exec is faked and sends the SIGTERM systemd would; QA probed a real
 // unit), and init's reaction to "deactivating" is covered by
@@ -196,6 +200,46 @@ it("does not wait for a bridge that started after the stopped one exited", async
   expect(next).toBeDefined();
   expect(unit.output()).toBe("Stop requested.\nStopped.\n");
   expect(next?.terms()).toBe(0);
+});
+
+it("finds the service under the folder name thc init gave it", async () => {
+  // thc init names the unit after the real path, or after the symlinked path a
+  // legacy store keeps; thc stop can be given either spelling.
+  for (const legacy of [false, true]) {
+    const root = await realpath(await folder());
+    const alias = join(await folder(), "alias");
+    await symlink(root, alias);
+    if (legacy) {
+      await mkdir(join(root, ".thc"));
+      const store = new Store(join(root, ".thc", "store.db"));
+      store.putEntity({
+        id: "entity",
+        directory: alias,
+        botId: "123",
+        createdAt: "2026-01-01",
+      });
+      store.setCursor("entity-id", "entity");
+      store.close();
+    }
+    const id = createHash("sha256")
+      .update(legacy ? alias : root)
+      .digest("hex")
+      .slice(0, 24);
+    const name = `thc-${id}.service`;
+    const running = await bridge(root);
+    const unit = systemd("active", running.pid);
+    const inner = unit.deps.exec;
+    unit.deps.exec = (file, args, options) =>
+      args.includes("show") && !args.includes(name)
+        ? Promise.resolve({
+            stdout: "ActiveState=inactive\nMainPID=0\n",
+            stderr: "",
+          })
+        : inner(file, args, options);
+    await stop(legacy ? root : alias, unit.deps);
+    expect(unit.calls).toContain(`systemctl --user stop --no-block ${name}`);
+    expect(running.terms()).toBe(1);
+  }
 });
 
 it("asks systemd only about an active unit whose main process is the bridge", async () => {

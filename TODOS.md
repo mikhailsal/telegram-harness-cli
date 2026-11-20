@@ -50,7 +50,7 @@
 
 **What:** a `thc stop` run while the bridge is already shutting down sends it another SIGTERM. The bridge handles SIGTERM with `process.once` (`src/core/runtime.ts`), so the second one ends it at once, without closing the adapter, the engine or the store.
 
-**Why:** found by /qa of #20 (low severity). Repro on real systemd: the folder's unit runs a bridge stand-in that exits 3 s after SIGTERM, `thc stop` waits, and a second `thc stop` from another shell logs `SIGTERM #2` 0.5 s later. The second stop sees `ActiveState=deactivating`, so `requestServiceStop` (`src/cli/service-unit.ts`) returns false and `stop()` falls back to `stopDirectory`. The same double signal happened before #20.
+**Why:** found by /qa of #20 (low severity). Repro on real systemd: the folder's unit runs a bridge stand-in that exits 3 s after SIGTERM, `thc stop` waits, and a second `thc stop` from another shell logs `SIGTERM #2` 0.5 s later. The second stop sees `ActiveState=deactivating`, so `requestServiceStop` (`src/cli/service-unit.ts`) returns false and `stop()` falls back to `stopDirectory`. The same double signal happened before #20. A single `thc stop` can send it too when `systemctl stop --no-block` times out (5 s) after systemd queued the job, which needs a stalled user bus: `requestServiceStop` then returns false and `stop()` signals as well (found by /ship's adversarial review of #20).
 
 **Pros:** a stop that systemd already runs could be waited for instead of signalled again; keeping the SIGTERM handler for the whole shutdown would also cover other tools. **Cons:** touches the signal path; #20 left `process.once` out of scope.
 
