@@ -14,6 +14,10 @@ All notable changes to `thc` are listed here. Versions follow
   the bridge has not exited yet. It used to print "Already initialized and
   running" and leave the bridge stopped once the stop finished. A bridge
   started in the foreground with `thc start` is still left alone.
+- When Codex restarts its daemon in the middle of a task and resumes the work
+  while a newer Telegram message is still being sent, the resumed answer
+  arrives as a reply to the original message. It used to be dropped, and the
+  chat showed "🖥 ✓ Done, no text response" instead.
 
 ## [0.1.1] - 2026-11-17
 
