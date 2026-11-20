@@ -46,4 +46,18 @@
 **Priority:** P3
 **Depends on:** None (the model/effort commands shipped in 0.1.0)
 
+### A second `thc stop` kills the bridge mid-shutdown
+
+**What:** a `thc stop` run while the bridge is already shutting down sends it another SIGTERM. The bridge handles SIGTERM with `process.once` (`src/core/runtime.ts`), so the second one ends it at once, without closing the adapter, the engine or the store.
+
+**Why:** found by /qa of #20 (low severity). Repro on real systemd: the folder's unit runs a bridge stand-in that exits 3 s after SIGTERM, `thc stop` waits, and a second `thc stop` from another shell logs `SIGTERM #2` 0.5 s later. The second stop sees `ActiveState=deactivating`, so `requestServiceStop` (`src/cli/service-unit.ts`) returns false and `stop()` falls back to `stopDirectory`. The same double signal happened before #20.
+
+**Pros:** a stop that systemd already runs could be waited for instead of signalled again; keeping the SIGTERM handler for the whole shutdown would also cover other tools. **Cons:** touches the signal path; #20 left `process.once` out of scope.
+
+**Context:** /qa report `.gstack/qa-reports/run-20261120T080352Z/` capture 014. The store is crash-safe, so no data loss was seen; the risk is an unclean shutdown.
+
+**Effort:** human S / CC S
+**Priority:** P3
+**Depends on:** None
+
 ## Completed
