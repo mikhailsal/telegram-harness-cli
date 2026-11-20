@@ -18,6 +18,10 @@ All notable changes to `thc` are listed here. Versions follow
   systemd. It used to signal the process directly, so systemd still reported
   the service as running while the bridge shut down. A `thc init` in that time
   printed "Already initialized and running", and the bot stayed stopped.
+- When Codex restarts its daemon in the middle of a task and resumes the work
+  while a newer Telegram message is still being sent, the resumed answer
+  arrives as a reply to the original message. It used to be dropped, and the
+  chat showed "🖥 ✓ Done, no text response" instead.
 
 ## [0.1.1] - 2026-11-17
 
