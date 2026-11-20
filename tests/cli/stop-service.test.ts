@@ -20,7 +20,8 @@ import { Store } from "../../src/store/index.js";
 // signalled directly (also when the folder is given through a symlink or keeps
 // a legacy symlinked name), a foreground bridge goes through systemctl, a
 // failed systemctl leaves the bridge running, the bridge gets a second
-// SIGTERM, or a newly started bridge keeps thc stop waiting;
+// SIGTERM, a newly started bridge keeps thc stop waiting, or a symlink
+// retargeted during the stop sends the signal to another folder's bridge;
 // why_new=stop.test.ts never consults systemd; seam=none; no_claim=systemd is
 // not run (exec is faked and sends the SIGTERM systemd would; QA probed a real
 // unit), and init's reaction to "deactivating" is covered by
@@ -240,6 +241,28 @@ it("finds the service under the folder name thc init gave it", async () => {
     expect(unit.calls).toContain(`systemctl --user stop --no-block ${name}`);
     expect(running.terms()).toBe(1);
   }
+});
+
+it("stops the folder it was given when its symlink is retargeted meanwhile", async () => {
+  const [first, second] = [await folder(), await folder()];
+  const alias = join(await folder(), "alias");
+  await symlink(first, alias);
+  const [stopped, other] = [await bridge(first), await bridge(second)];
+  // A foreground bridge, so thc stop falls back to the signal; the link moves
+  // to another project while systemd is asked.
+  const unit = systemd("inactive", 0);
+  const inner = unit.deps.exec;
+  unit.deps.exec = async (file, args, options) => {
+    await rm(alias);
+    await symlink(second, alias);
+    return inner(file, args, options);
+  };
+  let clock = 0;
+  unit.deps.now = () => (clock += 1000);
+  await stop(alias, unit.deps);
+  expect(unit.output()).toBe("Stop requested.\nStopped.\n");
+  expect(stopped.terms()).toBe(1);
+  expect(other.terms()).toBe(0);
 });
 
 it("asks systemd only about an active unit whose main process is the bridge", async () => {

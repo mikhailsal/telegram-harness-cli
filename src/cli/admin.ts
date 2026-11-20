@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { renderOutgoing } from "../channels/index.js";
-import { open, readFile, stat } from "node:fs/promises";
+import { open, readFile, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { readLockOwner, stopDirectory } from "../core/lock.js";
 import { loadConfig, resolveToken, type Config } from "../core/config.js";
@@ -87,14 +87,17 @@ export async function stop(
   directory: string,
   deps: CliDependencies,
 ): Promise<void> {
-  const owner = await readLockOwner(directory);
+  // A symlinked folder is resolved once: a link retargeted during the stop
+  // must not turn it on another folder's bridge.
+  const folder = await realpath(directory).catch(() => directory);
+  const owner = await readLockOwner(folder);
   if (!owner) {
     deps.stdout("Bridge is not running.\n");
     return;
   }
-  const service = await serviceDirectory(directory);
+  const service = await serviceDirectory(folder);
   if (!(await requestServiceStop(service, deps, owner.pid)))
-    await stopDirectory(directory);
+    await stopDirectory(folder);
   deps.stdout("Stop requested.\n");
   // The next command may start the bridge again (thc stop && thc init); it must
   // not find the old process still shutting down and decide that nothing is due.
@@ -102,7 +105,7 @@ export async function stop(
   // A record of another instance is a bridge started since, not this one.
   const deadline = deps.now() + stopWaitMs;
   while (
-    (await readLockOwner(directory))?.instance === owner.instance ||
+    (await readLockOwner(folder))?.instance === owner.instance ||
     alive(owner.pid)
   ) {
     if (deps.now() >= deadline)
