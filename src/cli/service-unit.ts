@@ -66,13 +66,13 @@ export async function isStopping(
     return false;
   }
 }
-// Whether systemd is stopping the unit and `pid` is its main process. That
-// bridge exits within the stop timeout and nothing starts it again. A stalled or
-// failed query means "no", so a live bridge still counts as running.
-async function isStoppingProcess(
+// Whether the unit is in `state` with `pid` as its main process. A stalled or
+// failed query means "no".
+async function unitHolds(
   directory: string,
   deps: CliDependencies,
   pid: number,
+  state: "active" | "deactivating",
 ): Promise<boolean> {
   try {
     const result = await deps.exec(
@@ -90,9 +90,34 @@ async function isStoppingProcess(
     );
     const lines = result.stdout.split("\n").map((line) => line.trim());
     return (
-      lines.includes("ActiveState=deactivating") &&
+      lines.includes(`ActiveState=${state}`) &&
       lines.includes(`MainPID=${String(pid)}`)
     );
+  } catch {
+    return false;
+  }
+}
+/**
+ * Stops the bridge `pid` through systemd when it is this folder's running
+ * service, so the unit reports "deactivating" until it exits and a later
+ * `systemctl start` waits for that. Signalling the process directly would leave
+ * the unit "active" meanwhile, and init would take the bridge for a running one.
+ * Returns false when systemd does not run it or could not be asked; the caller
+ * then signals the process itself.
+ */
+export async function requestServiceStop(
+  directory: string,
+  deps: CliDependencies,
+  pid: number,
+): Promise<boolean> {
+  if (!(await unitHolds(directory, deps, pid, "active"))) return false;
+  try {
+    await deps.exec(
+      "systemctl",
+      ["--user", "stop", "--no-block", unitName(directory)],
+      { env: deps.env, timeout: 5000 },
+    );
+    return true;
   } catch {
     return false;
   }
@@ -109,9 +134,11 @@ export async function isRunning(
 ): Promise<boolean> {
   if (await isActive(directory, deps)) return true;
   const owner = await readLockOwner(directory);
+  // A lock owner that systemd is stopping exits within the stop timeout, and
+  // nothing starts it again.
   return (
     owner !== undefined &&
-    !(await isStoppingProcess(directory, deps, owner.pid))
+    !(await unitHolds(directory, deps, owner.pid, "deactivating"))
   );
 }
 // The service must find the managed `thc` shim, which the agent's instructions

@@ -30,6 +30,17 @@ export async function configuredDirectory(canonical: string): Promise<string> {
     return saved;
   return canonical;
 }
+/**
+ * The name the folder's service was set up under, for any spelling of the
+ * folder. An unreadable folder or store keeps the given name.
+ */
+export async function serviceDirectory(directory: string): Promise<string> {
+  try {
+    return await configuredDirectory(await realpath(directory));
+  } catch {
+    return directory;
+  }
+}
 export async function installedTarget(
   args: Arguments,
   directory: string,
