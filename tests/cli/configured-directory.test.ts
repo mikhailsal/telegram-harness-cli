@@ -3,7 +3,10 @@ import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { expect, it } from "vitest";
-import { configuredDirectory } from "../../src/cli/init-options.js";
+import {
+  configuredDirectory,
+  serviceDirectory,
+} from "../../src/cli/init-options.js";
 import { Store } from "../../src/store/index.js";
 import { migrate } from "../../src/store/schema.js";
 
@@ -71,6 +74,23 @@ it("stops instead of guessing when an existing store cannot be read", async () =
       "this is not a database file".repeat(16),
     );
     await expect(configuredDirectory(root)).rejects.toThrow();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("keeps the given folder name for thc stop when the service name cannot be resolved", async () => {
+  // thc stop then signals the bridge itself, as it did before it asked systemd.
+  const root = await mkdtemp(join(tmpdir(), "thc-service-name-"));
+  try {
+    const missing = join(root, "gone");
+    expect(await serviceDirectory(missing)).toBe(missing);
+    await mkdir(join(root, ".thc"));
+    await writeFile(
+      join(root, ".thc", "store.db"),
+      "this is not a database file".repeat(16),
+    );
+    expect(await serviceDirectory(root)).toBe(root);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

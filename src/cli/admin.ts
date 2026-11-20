@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { renderOutgoing } from "../channels/index.js";
-import { open, readFile, stat } from "node:fs/promises";
+import { open, readFile, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { readLockOwner, stopDirectory } from "../core/lock.js";
 import { loadConfig, resolveToken, type Config } from "../core/config.js";
@@ -9,8 +9,10 @@ import { Store } from "../store/index.js";
 import { allowedFlags, flag, positive, type Arguments } from "./arguments.js";
 import type { CliDependencies } from "./context.js";
 import { CliError } from "./errors.js";
+import { serviceDirectory } from "./init-options.js";
 import { exists } from "./paths.js";
 import { redactSecrets } from "./secrets.js";
+import { requestServiceStop } from "./service-unit.js";
 
 async function availableUpdate(directory: string): Promise<string | null> {
   try {
@@ -85,18 +87,27 @@ export async function stop(
   directory: string,
   deps: CliDependencies,
 ): Promise<void> {
-  const owner = await readLockOwner(directory);
+  // A symlinked folder is resolved once: a link retargeted during the stop
+  // must not turn it on another folder's bridge.
+  const folder = await realpath(directory).catch(() => directory);
+  const owner = await readLockOwner(folder);
   if (!owner) {
     deps.stdout("Bridge is not running.\n");
     return;
   }
-  await stopDirectory(directory);
+  const service = await serviceDirectory(folder);
+  if (!(await requestServiceStop(service, deps, owner.pid)))
+    await stopDirectory(folder);
   deps.stdout("Stop requested.\n");
   // The next command may start the bridge again (thc stop && thc init); it must
   // not find the old process still shutting down and decide that nothing is due.
   // The lock record goes first, so the process itself has to be gone as well.
+  // A record of another instance is a bridge started since, not this one.
   const deadline = deps.now() + stopWaitMs;
-  while ((await readLockOwner(directory)) || alive(owner.pid)) {
+  while (
+    (await readLockOwner(folder))?.instance === owner.instance ||
+    alive(owner.pid)
+  ) {
     if (deps.now() >= deadline)
       throw new CliError(
         "E_ALREADY_RUNNING",

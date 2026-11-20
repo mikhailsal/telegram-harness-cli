@@ -14,6 +14,10 @@ All notable changes to `thc` are listed here. Versions follow
   the bridge has not exited yet. It used to print "Already initialized and
   running" and leave the bridge stopped once the stop finished. A bridge
   started in the foreground with `thc start` is still left alone.
+- `thc stop` stops a bridge that runs as the folder's systemd service through
+  systemd. It used to signal the process directly, so systemd still reported
+  the service as running while the bridge shut down. A `thc init` in that time
+  printed "Already initialized and running", and the bot stayed stopped.
 - When Codex restarts its daemon in the middle of a task and resumes the work
   while a newer Telegram message is still being sent, the resumed answer
   arrives as a reply to the original message. It used to be dropped, and the
