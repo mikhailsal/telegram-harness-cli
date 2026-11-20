@@ -11,6 +11,7 @@ import type { CliDependencies } from "./context.js";
 import { CliError } from "./errors.js";
 import { exists } from "./paths.js";
 import { redactSecrets } from "./secrets.js";
+import { requestServiceStop } from "./service-unit.js";
 
 async function availableUpdate(directory: string): Promise<string | null> {
   try {
@@ -90,13 +91,18 @@ export async function stop(
     deps.stdout("Bridge is not running.\n");
     return;
   }
-  await stopDirectory(directory);
+  if (!(await requestServiceStop(directory, deps, owner.pid)))
+    await stopDirectory(directory);
   deps.stdout("Stop requested.\n");
   // The next command may start the bridge again (thc stop && thc init); it must
   // not find the old process still shutting down and decide that nothing is due.
   // The lock record goes first, so the process itself has to be gone as well.
+  // A record of another instance is a bridge started since, not this one.
   const deadline = deps.now() + stopWaitMs;
-  while ((await readLockOwner(directory)) || alive(owner.pid)) {
+  while (
+    (await readLockOwner(directory))?.instance === owner.instance ||
+    alive(owner.pid)
+  ) {
     if (deps.now() >= deadline)
       throw new CliError(
         "E_ALREADY_RUNNING",
