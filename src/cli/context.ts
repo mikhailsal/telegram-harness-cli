@@ -21,6 +21,8 @@ export interface CliDependencies {
     config: Config,
     store: Store,
   ) => Promise<HarnessAdapter>;
+  // Doctor's model/list call to the Codex daemon at this socket.
+  listCodexModels?: (socket: string, signal: AbortSignal) => Promise<void>;
   notifyStartupFailure?: (directory: string, error: unknown) => Promise<void>;
   startBridge?: (directory: string, config: Config) => Promise<void>;
   packageRoot: string;

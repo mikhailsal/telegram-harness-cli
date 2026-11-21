@@ -3,6 +3,15 @@
 All notable changes to `thc` are listed here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `thc doctor` says whether the installed Codex answers the `model/list` call
+  that `/model` and `/effort` need, under `version.modelList`. Before, it only
+  compared the version with the tested baseline, so an owner sent to doctor by
+  the "cannot list models" reply learned nothing about model switching.
+
 ## [0.1.3] - 2026-11-21
 
 ### Fixed

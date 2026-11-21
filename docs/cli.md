@@ -166,6 +166,10 @@ previews in the tested Telegram client.
 
 With the protocol adapter, `/model` and `/effort` switch the model and the
 reasoning effort of the next turns. They need codex-cli 0.169.0 or newer.
+`thc doctor` reports it under `version.modelList`: `supported` when the Codex
+daemon answers `model/list`, `unsupported` for an older Codex, and `unavailable`
+when the daemon is not running. Doctor never starts the daemon; it waits at most
+5 seconds for the answer.
 
 | Telegram command          | Result                                                                                   |
 | ------------------------- | ---------------------------------------------------------------------------------------- |

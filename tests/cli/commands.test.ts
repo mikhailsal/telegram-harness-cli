@@ -58,6 +58,8 @@ beforeEach(() => {
       errors += value;
     },
     exec: () => Promise.resolve({ stdout: "yes", stderr: "" }),
+    // Never the Codex daemon of the machine running the tests.
+    listCodexModels: () => Promise.resolve(),
   };
 });
 afterEach(() => {
@@ -76,6 +78,7 @@ it("reports stopped status, doctor checks and does not expose the token", async 
     token: "ok",
     codex: true,
     codexLogin: true,
+    version: { fixture: "0.169.0", modelList: "supported" },
   });
   expect(output).not.toContain("abcdefghijklmnop");
   output = "";

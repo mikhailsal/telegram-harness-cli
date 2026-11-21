@@ -9,6 +9,7 @@ import { Store } from "../store/index.js";
 import { allowedFlags, flag, positive, type Arguments } from "./arguments.js";
 import type { CliDependencies } from "./context.js";
 import { CliError } from "./errors.js";
+import { versionCheck } from "./doctor-codex.js";
 import { serviceDirectories } from "./init-options.js";
 import { exists } from "./paths.js";
 import { redactSecrets } from "./secrets.js";
@@ -134,32 +135,6 @@ async function checkProgram(
     return true;
   } catch {
     return false;
-  }
-}
-async function versionCheck(
-  config: Config,
-  directory: string,
-  deps: CliDependencies,
-): Promise<{
-  version: string | null;
-  fixture: string;
-  matches: boolean | null;
-}> {
-  const fixture = "0.169.0";
-  try {
-    const result = await deps.exec(config.codex.executable, ["--version"], {
-      cwd: directory,
-      env: deps.env,
-      timeout: 5000,
-    });
-    const version = /\b(\d+\.\d+\.\d+)\b/.exec(result.stdout)?.[1] ?? null;
-    return {
-      version,
-      fixture,
-      matches: version === null ? null : version === fixture,
-    };
-  } catch {
-    return { version: null, fixture, matches: null };
   }
 }
 async function probe(
