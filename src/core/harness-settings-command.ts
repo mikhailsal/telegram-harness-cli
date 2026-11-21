@@ -22,6 +22,7 @@ import {
 } from "./harness-settings-runner.js";
 import type { Serialize } from "./harness-settings-runner.js";
 import { sendText, showCard } from "./harness-settings-io.js";
+import { fastCommand, fastOn } from "./harness-settings-tier.js";
 import {
   commit,
   effortConfirmation,
@@ -31,7 +32,7 @@ import {
 
 type Command = Extract<ChannelEvent, { kind: "command" }>;
 
-// /model and /effort, typed or as a card. Reads run outside the engine
+// /model, /effort and /fast, typed or as a card. Reads run outside the engine
 // queue; a write lands only if no other harness change happened meanwhile.
 export async function runSettingsCommand(
   ctx: RuntimeContext,
@@ -44,12 +45,14 @@ export async function runSettingsCommand(
     return;
   }
   const argument = event.arguments.trim();
-  const reset = event.command === "model" && argument.toLowerCase() === "reset";
+  const word = argument.toLowerCase();
+  const reset = event.command === "model" && word === "reset";
+  const listless = reset || (event.command === "fast" && word === "off");
   const version = desiredVersion(ctx);
   later(
     ctx,
     serialize,
-    (signal) => readState(ctx, signal, !reset),
+    (signal) => readState(ctx, signal, !listless),
     async (outcome) => {
       if (!outcome.ok) {
         await sendText(
@@ -68,6 +71,8 @@ export async function runSettingsCommand(
         return;
       }
       if (reset) await resetModel(ctx, event, outcome.value);
+      else if (event.command === "fast")
+        await fastCommand(ctx, event, argument, outcome.value);
       else if (event.command === "model")
         await modelCommand(ctx, event, argument, outcome.value);
       else await effortCommand(ctx, event, argument, outcome.value);
@@ -81,7 +86,14 @@ async function resetModel(
   state: SettingsState,
 ): Promise<void> {
   commit(ctx, event, {});
-  await sendText(ctx, event, resetConfirmation(event.language, state));
+  const text = resetConfirmation(event.language, state);
+  await sendText(
+    ctx,
+    event,
+    fastOn(state.desired)
+      ? `${text}\n${fill(event.language, "fastKept")}`
+      : text,
+  );
 }
 
 async function modelCommand(

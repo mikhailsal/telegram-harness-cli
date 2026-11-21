@@ -10,16 +10,22 @@ const desiredSchema = z
   .object({
     model: z.string().min(1).optional(),
     effort: z.string().min(1).optional(),
+    serviceTier: z.string().min(1).nullable().optional(),
   })
   .strict();
 export interface DesiredSettings {
   model?: string;
   effort?: string;
+  // A tier id from /fast on; null after /fast off.
+  serviceTier?: string | null;
 }
 function clean(value: z.infer<typeof desiredSchema>): DesiredSettings {
   return {
     ...(value.model ? { model: value.model } : {}),
     ...(value.effort ? { effort: value.effort } : {}),
+    ...(value.serviceTier === undefined
+      ? {}
+      : { serviceTier: value.serviceTier }),
   };
 }
 interface Values {
@@ -104,7 +110,8 @@ export function desiredSettings(
     ctx.log("settings.desired-invalid");
     return undefined;
   }
-  return parsed.data.model || parsed.data.effort
+  const { model, effort, serviceTier } = parsed.data;
+  return model || effort || serviceTier !== undefined
     ? clean(parsed.data)
     : undefined;
 }
@@ -142,6 +149,10 @@ export function recordExecution(
     adapter: ctx.config.codex.adapter,
     model: sent?.model ?? "none",
     effort: sent?.effort ?? "none",
+    serviceTier:
+      sent?.serviceTier === undefined
+        ? "none"
+        : (sent.serviceTier ?? "standard"),
     at: ctx.now().toISOString(),
   };
   ctx.store.setCursor(key, JSON.stringify(details));

@@ -2,7 +2,11 @@ import { fill } from "../channels/index.js";
 import type { ChannelEvent, Language } from "../channels/index.js";
 import type { RuntimeContext } from "./context.js";
 import type { DesiredSettings } from "./settings-audit.js";
-import { applySetting, effectiveSettings } from "./settings-audit.js";
+import {
+  applySetting,
+  desiredSettings,
+  effectiveSettings,
+} from "./settings-audit.js";
 import { effortLabel } from "./harness-settings-model.js";
 import type { ModelChoice, SettingsState } from "./harness-settings-model.js";
 import { releaseHold } from "./harness-settings-runner.js";
@@ -12,13 +16,18 @@ type Event = Pick<
   "updateId" | "chatId" | "userId" | "sentAt" | "language"
 >;
 
-// Every owner change is one audited write; it also lifts a queue hold.
+// Every owner change is one audited write; it also lifts a queue hold. A
+// model or effort change keeps the service tier; only /fast sets it.
 export function commit(
   ctx: RuntimeContext,
   event: Event,
   settings: DesiredSettings,
 ): void {
-  applySetting(ctx, event, "harness", settings);
+  const tier = desiredSettings(ctx)?.serviceTier;
+  applySetting(ctx, event, "harness", {
+    ...(tier === undefined ? {} : { serviceTier: tier }),
+    ...settings,
+  });
   releaseHold(ctx);
 }
 

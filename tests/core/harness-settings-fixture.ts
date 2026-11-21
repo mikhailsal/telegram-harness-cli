@@ -36,6 +36,13 @@ export function model(
       { reasoningEffort: "medium", description: "balanced" },
       { reasoningEffort: "high", description: "deep" },
     ],
+    serviceTiers: [
+      {
+        id: "priority",
+        name: "Fast",
+        description: "2x speed, increased usage",
+      },
+    ],
     ...options,
   };
 }
@@ -203,7 +210,7 @@ export function telegramTurn(store: Store, externalId: string, sent?: string) {
 }
 
 export function command(
-  name: "model" | "effort" | "status" | "new",
+  name: "model" | "effort" | "fast" | "status" | "new",
   args = "",
   updateId = 1,
   language: Language = "en",

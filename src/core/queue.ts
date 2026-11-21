@@ -34,6 +34,7 @@ export const knownCommands = new Set([
   "format",
   "model",
   "effort",
+  "fast",
   "help",
   "start",
 ]);

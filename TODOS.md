@@ -2,20 +2,6 @@
 
 ## Telegram
 
-### Service tier (`/fast`) toggle
-
-**What:** a `/fast` command that sets `serviceTier` on `turn/start`.
-
-**Why:** Codex exposes service tiers per model (`model/list` `serviceTiers`); owners who switch models may also want speed tiers.
-
-**Pros:** reuses the `/model` settings path. **Cons:** another knob; tier ids vary by account.
-
-**Context:** deferred from the model/effort plan (`docs/designs/telegram-model-effort.md`, row E4). Start from `harness-settings/desired`.
-
-**Effort:** human S / CC S
-**Priority:** P3
-**Depends on:** None (the model/effort commands shipped in 0.1.0)
-
 ### Show model and effort in the live status draft
 
 **What:** add the active model/effort to the per-turn status message.
@@ -47,6 +33,22 @@
 **Depends on:** a GitHub release for every version tag (the `gh release create` step in `docs/testing.md`)
 
 ## Completed
+
+### Service tier (`/fast`) toggle
+
+**What:** a `/fast` command that sets `serviceTier` on `turn/start`.
+
+**Why:** Codex exposes service tiers per model (`model/list` `serviceTiers`); owners who switch models may also want speed tiers.
+
+**Pros:** reuses the `/model` settings path. **Cons:** another knob; tier ids vary by account.
+
+**Context:** deferred from the model/effort plan (`docs/designs/telegram-model-effort.md`, row E4). Start from `harness-settings/desired`.
+
+**Effort:** human S / CC S
+**Priority:** P3
+**Depends on:** None (the model/effort commands shipped in 0.1.0)
+
+**Completed:** unreleased (2026-11-21). `/fast` toggles and `/fast on|off` sets the tier (`src/core/harness-settings-tier.ts`). On sends the current model's tier that Codex names Fast, off sends `serviceTier: null`, which a live probe of codex-cli 0.169.0 showed returns the thread to the standard tier even over a `service_tier` in its config. The tier is stored in `harness-settings/desired` and model changes keep it.
 
 ### thc doctor: report whether model switching is supported
 
