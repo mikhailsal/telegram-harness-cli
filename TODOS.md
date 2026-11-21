@@ -60,4 +60,20 @@
 **Priority:** P3
 **Depends on:** None
 
+## Distribution
+
+### Install the latest release instead of main
+
+**What:** `install.sh` installs the newest GitHub release tag instead of the newest commit on main.
+
+**Why:** today `install.sh` reads `commits/main` (`install.sh:68`) and installs that commit, so a version tag and its GitHub release change nothing for users. Every merge reaches a new install at once, before the live acceptance and the Telegram checklist that a release requires.
+
+**Pros:** users get only code that passed release acceptance; the version a user runs matches a CHANGELOG entry. **Cons:** a fix waits for the next release; `thc init --update` and `.thc/version` have to follow tags too; one more moving part when no release exists yet.
+
+**Context:** raised after 0.1.2, when `docs/testing.md` added the step that creates a GitHub release from the CHANGELOG. Kept out of that change because it alters how every user receives updates.
+
+**Effort:** human S / CC S
+**Priority:** P2
+**Depends on:** a GitHub release for every version tag (the `gh release create` step in `docs/testing.md`)
+
 ## Completed

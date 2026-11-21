@@ -149,12 +149,39 @@ export function artifactFingerprint(root: string): string {
     add(name);
   return hash.digest("hex");
 }
+/** npm bundled with the Node version in .nvmrc; the tag workflow uses both. */
+export const RELEASE_NPM = "11.19.1";
+export interface Toolchain {
+  node: string;
+  npm: string;
+}
+/** The toolchain a release record must come from, so the tag check can match it. */
+export function releaseToolchain(cwd = process.cwd()): Toolchain {
+  let pinned = "";
+  try {
+    pinned = readFileSync(join(cwd, ".nvmrc"), "utf8").trim();
+  } catch {
+    // Reported below with the same message as an invalid pin.
+  }
+  if (!/^\d+\.\d+\.\d+$/.test(pinned))
+    throw new Error("Release needs an exact Node version in .nvmrc");
+  return { node: `v${pinned}`, npm: RELEASE_NPM };
+}
+export function requireReleaseToolchain(
+  actual: Toolchain,
+  pinned: Toolchain,
+): void {
+  if (actual.node !== pinned.node || actual.npm !== pinned.npm)
+    throw new Error(
+      `Release needs Node ${pinned.node} with npm ${pinned.npm} (the tag workflow's toolchain: Node from .nvmrc, npm from RELEASE_NPM in scripts/release.ts); this run has Node ${actual.node} with npm ${actual.npm}`,
+    );
+}
 function runBuildCommand(program: string, args: string[], cwd: string): void {
   const result = spawnSync(program, args, { cwd, stdio: "inherit" });
   if (result.error || result.status !== 0)
     throw new Error(`${program} ${args[0] ?? ""} failed`);
 }
-export function toolchain(): { node: string; npm: string } {
+export function toolchain(): Toolchain {
   const result = spawnSync("npm", ["--version"], { encoding: "utf8" });
   if (result.error || result.status !== 0)
     throw new Error("npm version unavailable");
@@ -244,6 +271,7 @@ async function context(): Promise<
 }
 export async function createRelease(): Promise<void> {
   const expected = await context();
+  requireReleaseToolchain(toolchain(), releaseToolchain());
   if (git(["status", "--porcelain", "--untracked-files=normal"]))
     throw new Error("Release requires a clean working tree");
   const record: unknown = JSON.parse(
@@ -266,6 +294,7 @@ export async function verifyTag(tag: string): Promise<void> {
   const expected = await context();
   if (tag !== `v${expected.version}`)
     throw new Error("Tag does not match package version");
+  requireReleaseToolchain(toolchain(), releaseToolchain());
   if (git(["cat-file", "-t", `refs/tags/${tag}`]) !== "tag")
     throw new Error("Release tag must be annotated");
   if (git(["rev-list", "-n", "1", tag]) !== expected.head)
@@ -296,13 +325,33 @@ export async function verifyTag(tag: string): Promise<void> {
   }
   console.log("Release tag acceptance record is valid.");
 }
+/** The CHANGELOG section of one version: the body of its GitHub release. */
+export function releaseNotes(changelog: string, version: string): string {
+  const lines = changelog.split("\n");
+  const start = lines.findIndex((line) => line.startsWith(`## [${version}]`));
+  if (start < 0) throw new Error(`CHANGELOG has no section for ${version}`);
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((line) => line.startsWith("## "));
+  const notes = (end < 0 ? rest : rest.slice(0, end)).join("\n").trim();
+  if (!notes) throw new Error(`CHANGELOG section for ${version} is empty`);
+  return notes;
+}
+async function printNotes(tag: string): Promise<void> {
+  if (!tag.startsWith("v")) throw new Error("Release tags start with v");
+  const changelog = await readFile("CHANGELOG.md", "utf8");
+  console.log(releaseNotes(changelog, tag.slice(1)));
+}
+const usage = "Usage: node scripts/release.ts [--verify-tag TAG | --notes TAG]";
 export async function releaseMain(
   args: string[] = process.argv,
 ): Promise<void> {
-  if (args[2] === "--verify-tag" && args.length === 4 && args[3])
-    await verifyTag(args[3]);
+  const [option, tag] = args.slice(2);
+  if (args.length === 4 && tag && option === "--verify-tag")
+    await verifyTag(tag);
+  else if (args.length === 4 && tag && option === "--notes")
+    await printNotes(tag);
   else if (args.length === 2) await createRelease();
-  else throw new Error("Usage: node scripts/release.ts [--verify-tag TAG]");
+  else throw new Error(usage);
 }
 if (
   process.argv[1] &&

@@ -5,6 +5,8 @@ import { pathToFileURL } from "node:url";
 import {
   artifactFingerprint,
   prepareBuild,
+  releaseToolchain,
+  requireReleaseToolchain,
   worktreeFingerprint,
 } from "./release.ts";
 import type { BuildResult, LiveRecord } from "./release.ts";
@@ -98,6 +100,7 @@ export interface AcceptanceOperations {
   build: typeof prepareBuild;
   scenario: typeof checkedScenario;
   packageFile: () => Promise<string>;
+  pinned: typeof releaseToolchain;
 }
 function operations(): AcceptanceOperations {
   return {
@@ -107,6 +110,7 @@ function operations(): AcceptanceOperations {
     build: prepareBuild,
     scenario: checkedScenario,
     packageFile: () => readFile("package.json", "utf8"),
+    pinned: releaseToolchain,
   };
 }
 const usage =
@@ -189,6 +193,8 @@ export async function runAcceptance(
   record.artifact = state.build.artifact;
   record.node = state.build.node;
   record.npm = state.build.npm;
+  // A clean record only authorizes a release made with the tag check's toolchain.
+  if (!record.dirty) requireReleaseToolchain(state.build, ops.pinned());
   if (record.fingerprint !== ops.fingerprint())
     throw new Error("Working tree changed during build");
   process.env.THC_LIVE_SYNTHETIC_TOKEN = "123:synthetic";
