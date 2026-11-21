@@ -21,10 +21,9 @@ jobs:
       - name: Install the pinned acceptance runtime
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 24.22.0
+          node-version-file: .nvmrc
           cache: npm
-      - name: Verify the bundled package manager
-        run: test "$(npm --version)" = "11.19.1"
+      # scripts/release.ts also checks that npm is the one bundled with it.
       - name: Validate the annotated release record
         env:
           RELEASE_TAG: ${{ github.ref_name }}

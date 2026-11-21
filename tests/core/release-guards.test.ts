@@ -8,6 +8,7 @@ import {
   verifyTag,
   releaseMain,
   worktreeFingerprint,
+  RELEASE_NPM,
 } from "../../scripts/release.ts";
 
 const passing = {
@@ -37,13 +38,18 @@ async function releaseRepository(root: string): Promise<void> {
   await writeFile(join(root, "package-lock.json"), "locked");
   await writeFile(join(root, "src/input.ts"), "export const value = 1;\n");
   await writeFile(join(root, "skills/SKILL.md"), "skill\n");
+  await writeFile(join(root, ".nvmrc"), `${process.version.slice(1)}\n`);
+  await writeFile(
+    join(root, "CHANGELOG.md"),
+    "# Changelog\n\n## [1.2.3] - 2026-01-01\n\n### Fixed\n\n- A fix.\n",
+  );
   await writeFile(
     join(root, "scripts/build.ts"),
     'import {mkdirSync, writeFileSync} from "node:fs"; mkdirSync("dist"); writeFileSync("dist/output.js", "built"); writeFileSync("npm-shrinkwrap.json", "locked");\n',
   );
   await writeFile(
     join(root, ".commands/npm"),
-    '#!/bin/sh\nif [ "$1" = "--version" ]; then echo 11; else mkdir node_modules; fi\n',
+    `#!/bin/sh\nif [ "$1" = "--version" ]; then pwd >> ${join(root, ".quality/npm-cwd")}; echo ${RELEASE_NPM}; else mkdir node_modules; fi\n`,
     { mode: 0o755 },
   );
   expect(spawnSync("git", ["init", "-q"], { cwd: root }).status).toBe(0);
@@ -88,6 +94,10 @@ async function releaseFailureCases(root: string): Promise<void> {
   await writeFile(npmPath, "#!/bin/sh\nexit 1\n");
   expect(() => toolchain()).toThrow("npm version unavailable");
   await expect(prepareBuild()).rejects.toThrow("npm ci failed");
+  await writeFile(npmPath, "#!/bin/sh\necho 11.0.0\n");
+  const other = `Release needs Node ${process.version} with npm ${RELEASE_NPM} (the tag workflow's toolchain: Node from .nvmrc, npm from RELEASE_NPM in scripts/release.ts); this run has Node ${process.version} with npm 11.0.0`;
+  await expect(createRelease()).rejects.toThrow(other);
+  await expect(verifyTag("v1.2.3")).rejects.toThrow(other);
   await writeFile(npmPath, npm);
 }
 function gitOutput(root: string, ...args: string[]): string {
@@ -114,8 +124,52 @@ async function rejectedTags(root: string): Promise<void> {
   await expect(verifyTag("v1.2.3")).rejects.toThrow("does not contain");
   gitOutput(root, "tag", "-d", "v1.2.3");
 }
+async function releaseNotesCases(root: string): Promise<void> {
+  const { vi } = await import("vitest");
+  const { appendFile } = await import("node:fs/promises");
+  // A draft in the working copy is not part of the tagged release.
+  await appendFile(join(root, "CHANGELOG.md"), "- A draft.\n");
+  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+  try {
+    await releaseMain(["node", "script", "--notes", "v1.2.3"]);
+    expect(log).toHaveBeenCalledWith("### Fixed\n\n- A fix.");
+  } finally {
+    log.mockRestore();
+    gitOutput(root, "checkout", "--", "CHANGELOG.md");
+  }
+  await expect(
+    releaseMain(["node", "script", "--notes", "v9.9.9"]),
+  ).rejects.toThrow("No CHANGELOG.md at tag v9.9.9");
+  await expect(
+    releaseMain(["node", "script", "--notes", "1.2.3"]),
+  ).rejects.toThrow("Release tags start with v");
+  await expect(releaseMain(["node", "script", "--notes"])).rejects.toThrow(
+    "Usage",
+  );
+}
+/** Builds the fixture and records a passing live run for that build. */
+async function recordPassingBuild(root: string): Promise<void> {
+  const { readFile, rm, writeFile } = await import("node:fs/promises");
+  const build = await prepareBuild();
+  await rm(build.root, { recursive: true, force: true });
+  // The npm version comes from where npm ci ran, not from the checkout.
+  const probed = await readFile(join(root, ".quality/npm-cwd"), "utf8");
+  expect(probed.trim().split("\n").at(-1)).toBe(build.root);
+  const record = {
+    ...passing,
+    ...build,
+    date: new Date().toISOString(),
+    head: gitOutput(root, "rev-parse", "HEAD"),
+    tree: gitOutput(root, "rev-parse", "HEAD^{tree}"),
+    fingerprint: worktreeFingerprint(root),
+  };
+  await writeFile(
+    join(root, ".quality/test-live.json"),
+    JSON.stringify(record),
+  );
+}
 it("rebuilds and verifies an annotated release in an isolated repository", async () => {
-  const { mkdtemp, rm, writeFile } = await import("node:fs/promises");
+  const { mkdtemp, rm } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
   const root = await mkdtemp(join(tmpdir(), "thc-release-"));
   const prior = process.cwd(),
@@ -126,26 +180,14 @@ it("rebuilds and verifies an annotated release in an isolated repository", async
     process.env.PATH = `${join(root, ".commands")}:${path ?? ""}`;
     await releaseFailureCases(root);
     await rejectedTags(root);
-    const build = await prepareBuild();
-    await rm(build.root, { recursive: true, force: true });
-    const record = {
-      ...passing,
-      ...build,
-      date: new Date().toISOString(),
-      head: gitOutput(root, "rev-parse", "HEAD"),
-      tree: gitOutput(root, "rev-parse", "HEAD^{tree}"),
-      fingerprint: worktreeFingerprint(root),
-    };
-    await writeFile(
-      join(root, ".quality/test-live.json"),
-      JSON.stringify(record),
-    );
+    await recordPassingBuild(root);
     await releaseMain(["node", "script"]);
     await releaseMain(["node", "script", "--verify-tag", "v1.2.3"]);
     await expect(verifyTag("v1.2.4")).rejects.toThrow("Tag does not match");
     await expect(releaseMain(["node", "script", "--bad"])).rejects.toThrow(
       "Usage",
     );
+    await releaseNotesCases(root);
     gitOutput(
       root,
       "-c",

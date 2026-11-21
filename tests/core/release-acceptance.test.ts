@@ -46,6 +46,7 @@ function acceptanceOperations(): AcceptanceOperations {
       }),
     scenario: () => Promise.resolve({ acceptance: () => Promise.resolve() }),
     packageFile: () => Promise.resolve('{"version":"1.2.3"}'),
+    pinned: () => ({ node: "v24", npm: "11" }),
   };
 }
 it("accepts only both adapters against the unchanged isolated artifact", async () => {
@@ -76,6 +77,27 @@ it("accepts only both adapters against the unchanged isolated artifact", async (
   const dirty = newRecord();
   await runAcceptance(dirty, {}, ["node", "script", "--allow-dirty"], ops);
   expect(dirty.dirty).toBe(true);
+});
+
+it("refuses a clean run on another toolchain than the tag check uses", async () => {
+  const ops = acceptanceOperations();
+  ops.pinned = () => ({ node: "v24.22.0", npm: "11.19.1" });
+  let started = false;
+  ops.scenario = () => {
+    started = true;
+    return Promise.resolve({ acceptance: () => Promise.resolve() });
+  };
+  const clean = newRecord();
+  await expect(
+    runAcceptance(clean, {}, ["node", "script"], ops),
+  ).rejects.toThrow(
+    "Release needs Node v24.22.0 with npm 11.19.1 (the tag workflow's toolchain: Node from .nvmrc, npm from RELEASE_NPM in scripts/release.ts); this run has Node v24 with npm 11",
+  );
+  expect(started).toBe(false);
+  expect(clean.result).toBe("failed");
+  const dirty = newRecord();
+  await runAcceptance(dirty, {}, ["node", "script", "--allow-dirty"], ops);
+  expect(dirty).toMatchObject({ result: "passed", dirty: true });
 });
 
 it("pins a low effort unless the run names a model or an effort", () => {

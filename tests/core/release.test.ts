@@ -6,6 +6,9 @@ import {
   artifactFingerprint,
   copyBuildInputs,
   worktreeFingerprint,
+  releaseNotes,
+  releaseToolchain,
+  requireReleaseToolchain,
 } from "../../scripts/release.ts";
 import { newRecord } from "../../scripts/test-live.ts";
 
@@ -265,4 +268,69 @@ it("starts live acceptance with a failure record", () => {
     dirty: true,
     adapters: {},
   });
+});
+
+it("reads the release toolchain from an exact .nvmrc version", async () => {
+  const { mkdtemp, rm, writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const root = await mkdtemp(join(tmpdir(), "thc-pin-"));
+  try {
+    expect(() => releaseToolchain(root)).toThrow(
+      "exact Node version in .nvmrc",
+    );
+    await writeFile(join(root, ".nvmrc"), "24\n");
+    expect(() => releaseToolchain(root)).toThrow(
+      "exact Node version in .nvmrc",
+    );
+    await writeFile(join(root, ".nvmrc"), "24.22.0\n");
+    expect(releaseToolchain(root)).toEqual({
+      node: "v24.22.0",
+      npm: "11.19.1",
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+  const pinned = { node: "v24.22.0", npm: "11.19.1" };
+  const check = (actual: { node: string; npm: string }) => () => {
+    requireReleaseToolchain(actual, pinned);
+  };
+  expect(check(pinned)).not.toThrow();
+  expect(check({ node: "v24.22.1", npm: "11.19.1" })).toThrow(
+    "this run has Node v24.22.1 with npm 11.19.1",
+  );
+  expect(check({ node: "v24.22.0", npm: "11.20.0" })).toThrow(
+    "this run has Node v24.22.0 with npm 11.20.0",
+  );
+});
+
+it("takes the release notes from the version's CHANGELOG section", () => {
+  const changelog = [
+    "# Changelog",
+    "",
+    "## [0.1.10] - 2026-02-01",
+    "",
+    "- Later.",
+    "",
+    "## [0.1.1] - 2026-01-01",
+    "",
+    "### Fixed",
+    "",
+    "- One.",
+    "",
+    "## [0.1.0] - 2025-12-01",
+    "",
+    "- First.",
+    "",
+    "## [0.0.9]",
+    "",
+  ].join("\n");
+  expect(releaseNotes(changelog, "0.1.1")).toBe("### Fixed\n\n- One.");
+  expect(releaseNotes(changelog, "0.1.10")).toBe("- Later.");
+  expect(releaseNotes("## [1.0.0]\n\n- Last.\n", "1.0.0")).toBe("- Last.");
+  expect(() => releaseNotes(changelog, "0.2.0")).toThrow(
+    "CHANGELOG has no section for 0.2.0",
+  );
+  expect(() => releaseNotes(changelog, "0.0.9")).toThrow(
+    "CHANGELOG section for 0.0.9 is empty",
+  );
 });

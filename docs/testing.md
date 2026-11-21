@@ -11,8 +11,11 @@ For local development, `npm run test:live -- --allow-dirty` permits staged,
 unstaged and untracked work. Its record is marked dirty and cannot authorize a
 release. It records a SHA-256 fingerprint of the source worktree and fails if
 the content or HEAD changes during the run. Before a release, run
-`npm run test:live` from a clean checkout. It requires
-Node 24, npm, access to the locked npm packages, an authenticated `codex`
+`npm run test:live` from a clean checkout. A clean run requires
+the exact Node version in `.nvmrc` with its bundled npm 11.19.1, the toolchain
+the tag workflow verifies with; on any other it stops after the build with an
+error that names both. When `.nvmrc` moves to a Node release that bundles
+another npm, update `RELEASE_NPM` in `scripts/release.ts` with it. It also requires access to the locked npm packages, an authenticated `codex`
 command, a running Codex daemon and `tmux`. It copies the Git-enumerated build
 inputs into a temporary directory, installs the locked dependencies with
 `npm ci`, and builds there. It creates a separate temporary workspace and a new session
@@ -72,9 +75,27 @@ requires a clean tree and a passing clean-run record for the exact commit, tree,
 worktree fingerprint and version from the preceding 24 hours. It repeats the
 isolated locked build and compares the resulting artifact and toolchain with
 the record; the tag verifier does the same, so it needs the same Node and npm
-versions and access to the locked packages. It creates an annotated local version tag
+versions and access to the locked packages. Both refuse to start on a toolchain
+other than the one pinned by `.nvmrc`. It creates an annotated local version tag
 containing the record and does not push it. The tag workflow checks that the
 annotation matches the tagged commit and was fresh at tag creation. The record
 is an operator attestation, not a cryptographic proof that a model or client
 check was performed. The package is currently private; this workflow does not
 publish it to npm.
+
+The workflow has read-only repository access, so it does not create the GitHub
+release. Once its check passes, create the release with the version's CHANGELOG
+section as the notes, which `node scripts/release.ts --notes vX.Y.Z` prints from
+the tagged commit. `gh release create --verify-tag` only checks that the tag
+exists, so first confirm that the tag on GitHub still points at the commit the
+workflow checked and that this check passed:
+
+```sh
+tag=vX.Y.Z
+commit=$(git rev-parse "$tag^{commit}") &&
+  test "$(git ls-remote origin "refs/tags/$tag^{}" | cut -f1)" = "$commit" &&
+  test "$(gh run list --workflow release.yml --commit "$commit" \
+    --json conclusion --jq '.[0].conclusion')" = success &&
+  notes=$(node scripts/release.ts --notes "$tag") &&
+  gh release create "$tag" --verify-tag --title "$tag" --notes "$notes"
+```
