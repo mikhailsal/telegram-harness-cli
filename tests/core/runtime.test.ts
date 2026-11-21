@@ -191,3 +191,36 @@ it("releases the lock on abort while adapter creation is still pending", async (
   finish?.(late);
   await waitFor(() => late.closed);
 });
+it("keeps handling SIGTERM until it has shut down", async () => {
+  // Regression: a second thc stop sent another SIGTERM while the bridge was
+  // closing, and the default action ended it without closing the adapter, the
+  // engine or the store.
+  class SlowClose extends FakeAdapter {
+    closing = false;
+    finish: (() => void) | undefined;
+    override close(): Promise<void> {
+      this.closing = true;
+      return new Promise((resolve) => {
+        this.finish = () => {
+          void super.close().then(resolve);
+        };
+      });
+    }
+  }
+  const fake = new FakeChannel();
+  fake.updates = [event];
+  const adapter = new SlowClose();
+  const terms = process.listenerCount("SIGTERM");
+  const running = startBridge(directory, config(), {
+    channel: channel(fake),
+    adapterFactory: () => Promise.resolve(adapter),
+    tickIntervalMs: 20,
+  });
+  await waitFor(() => fake.deliveries.length === 1);
+  process.emit("SIGTERM");
+  await waitFor(() => adapter.closing);
+  expect(process.listenerCount("SIGTERM")).toBe(terms + 1);
+  adapter.finish?.();
+  await running;
+  expect(process.listenerCount("SIGTERM")).toBe(terms);
+});
