@@ -78,4 +78,4 @@
 **Priority:** P3
 **Depends on:** None
 
-**Completed:** unreleased (2026-11-21). The bridge keeps its SIGTERM handler until shutdown ends (`src/core/runtime.ts`), so a repeated SIGTERM no longer cuts the shutdown short.
+**Completed:** v0.1.3 (2026-11-21). The bridge keeps its SIGTERM handler until shutdown ends (`src/core/runtime.ts`), so a repeated SIGTERM no longer cuts the shutdown short.
