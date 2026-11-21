@@ -41,6 +41,20 @@ export async function serviceDirectory(directory: string): Promise<string> {
     return directory;
   }
 }
+/**
+ * The names the service of `folder`, the real path of `given`, may run under:
+ * the one its store keeps and the spelling the folder was given. A legacy
+ * project set up through a symlink keeps that name even when its store does
+ * not record it (#21).
+ */
+export async function serviceDirectories(
+  given: string,
+  folder: string,
+): Promise<string[]> {
+  const saved = await serviceDirectory(folder);
+  const spelled = resolve(given);
+  return saved === spelled ? [saved] : [saved, spelled];
+}
 export async function installedTarget(
   args: Arguments,
   directory: string,

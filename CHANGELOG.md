@@ -3,6 +3,19 @@
 All notable changes to `thc` are listed here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- `thc stop` run through a symlinked folder path stops the bridge service that
+  an older `thc init` set up under that path, also when the project's store
+  does not record the folder. It used to signal the bridge directly, so systemd
+  still reported the service as running, and the next `thc init` left the bot
+  stopped.
+- A second `thc stop` sent while the bridge is shutting down no longer ends it
+  at once. The bridge now finishes closing Codex and its store first. Pressing
+  Ctrl+C twice still ends a bridge started in the foreground at once.
+
 ## [0.1.2] - 2026-11-21
 
 ### Fixed

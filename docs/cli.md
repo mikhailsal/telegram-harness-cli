@@ -130,8 +130,10 @@ for both adapters is documented in the [README](../README.md).
 Use `thc status`, `thc doctor`, and `thc tail` to inspect the bridge. `thc stop`
 stops only the process that owns the folder lock. When that process is the main
 process of the folder's systemd user service, it asks systemd to stop the
-service; otherwise it signals the process. It waits up to 15 seconds for the
-bridge to exit, so `thc stop && thc init` is safe, and so is a `thc init` run
+service, found under the folder's real path or the path you gave `thc stop`
+(an older `thc init` may have used a symlinked path); otherwise it signals the
+process. A repeated stop does not cut the bridge's shutdown short. It waits up
+to 15 seconds for the bridge to exit, so `thc stop && thc init` is safe, and so is a `thc init` run
 while the service is still stopping. If the bridge is still running after
 that, `thc stop` fails with `E_ALREADY_RUNNING`. systemd can keep the unit
 stopping, for up to 90 seconds by default, while it waits for the unit's

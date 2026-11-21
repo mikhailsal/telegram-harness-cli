@@ -251,8 +251,11 @@ function signals(
   const stop = (): void => {
     controller.abort();
   };
+  // A second Ctrl+C ends the bridge at once, as terminals expect. SIGTERM comes
+  // from tools such as thc stop and systemd, which may repeat it; it must not
+  // cut the shutdown short.
   process.once("SIGINT", stop);
-  process.once("SIGTERM", stop);
+  process.on("SIGTERM", stop);
   external?.addEventListener("abort", stop, { once: true });
   if (external?.aborted) stop();
   return () => {
