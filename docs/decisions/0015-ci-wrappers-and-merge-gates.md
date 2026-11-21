@@ -6,8 +6,8 @@ Status: accepted (P10); amended in F02 and F06.
 
 The CLI decides every pass or fail. A CI wrapper only translates its
 provider's event into explicit revisions, installs the pinned environment,
-calls the CLI, and keeps the reports. The commands it calls, `quality gate`,
-`quality audit`, and `quality ci verdict`, read no provider variables, so the
+calls the CLI, and keeps the reports. `quality ci prepare`, `quality gate`,
+`quality audit`, and `quality ci verdict` read no provider variables, so the
 same commands run on a plain Linux machine with a clone and nothing else.
 
 The gate is in `quality/engine/gate.py` and `quality/cli/gate_cmd.py`, the
@@ -71,6 +71,18 @@ repository; the
 [GitLab wrapper](../../ci/gitlab/quality.gitlab-ci.yml) is a reference for
 migration that only a live GitLab run could prove.
 
+The GitHub jobs first run `quality bootstrap --core-only`. The main job
+asks `quality ci prepare --profiles` which profiles the tested tree and
+range activate. It installs PHP only when that list includes PHP, including
+when a candidate changes a dormant PHP helper. The main job provisions all
+active environments because the maintainer acceptance suite exercises other
+profiles, including the browser profile. The browser job provisions only its
+lane. The audit and aggregate need the core and standalone tools.
+
+When the first push to the default branch has no previous tip, its range
+starts at the empty tree. The shipped helpers all count as added, which
+activates their profiles for that push.
+
 ## The required status
 
 Branch protection requires exactly one status: the aggregate job named in
@@ -106,14 +118,7 @@ Caches never carry trust from a pull request: jobs restore the cache of the
 default branch, and only a push to the default branch saves it. The coverage
 baseline of each lane is the `report.json` saved by that push.
 
-The template's maintainer workflow installs PHP 8.4, the one runtime that
-bootstrap does not download ([decision 0002](0002-installation-strategy.md)).
-This repository has no PHP application, so its PHP helper is dormant
-([decision 0016](0016-template-lifecycle.md)) and its jobs install no PHP; a
-candidate that changes the helper fails for the missing runtime. Every job runs `quality
-bootstrap`, because only bootstrap downloads, including the core's uv
-([decision 0010](0010-launcher-bootstrap-and-hooks.md#launcher)). The jobs
-of both lanes also lift the AppArmor restriction of Ubuntu 24.04 on
+The GitHub jobs for both lanes lift the AppArmor restriction of Ubuntu 24.04 on
 unprivileged user namespaces; without it the suites run with the network and the gate warns
 ([decision 0008](0008-test-and-coverage-engine.md#network-isolation)).
 

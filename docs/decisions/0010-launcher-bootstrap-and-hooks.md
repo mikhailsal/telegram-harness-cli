@@ -19,7 +19,7 @@ CPython with Ruff targeting Python 3.10.
   ([decision 0016](0016-template-lifecycle.md#export)).
 - Every other command first runs `uv sync --frozen --offline --quiet` in
   `tools/quality`. A failure is exit 3 with the instruction to run
-  `./quality bootstrap`; nothing is downloaded.
+  `./quality bootstrap`. The launcher downloads nothing in this path.
 - The launcher then replaces itself with the core interpreter in isolated
   mode (`-I`). It drops `VIRTUAL_ENV`, `PYTHONPATH`, `PYTHONHOME`, and
   `UV_PROJECT_ENVIRONMENT`, and keeps `GIT_INDEX_FILE`, which hooks need.
@@ -65,6 +65,11 @@ The core's `bootstrap` command, after the launcher step:
      ([decision 0013](0013-php-profile.md#environments));
 3. installs the managed `pre-commit` hook, and the `pre-push` hook with
    `--pre-push`.
+
+In CI, `bootstrap --core-only` stops after installing the core and standalone
+tools. Use `quality ci prepare` to fill the package caches for the same
+revisions that the gate checks. It can list active profiles first and can
+limit setup to one lane ([decision 0015](0015-ci-wrappers-and-merge-gates.md)).
 
 Components are read from the staged candidate in an isolated snapshot, the
 same view the pre-commit check uses, honoring `GIT_INDEX_FILE`. Bootstrap
