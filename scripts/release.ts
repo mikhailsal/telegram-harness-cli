@@ -181,8 +181,12 @@ function runBuildCommand(program: string, args: string[], cwd: string): void {
   if (result.error || result.status !== 0)
     throw new Error(`${program} ${args[0] ?? ""} failed`);
 }
-export function toolchain(): Toolchain {
-  const result = spawnSync("npm", ["--version"], { encoding: "utf8" });
+/** Node and the npm that runs in `cwd`, where a directory-aware shim may pick another. */
+export function toolchain(cwd?: string): Toolchain {
+  const result = spawnSync("npm", ["--version"], {
+    encoding: "utf8",
+    ...(cwd === undefined ? {} : { cwd }),
+  });
   if (result.error || result.status !== 0)
     throw new Error("npm version unavailable");
   return { node: process.version, npm: result.stdout.trim() };
@@ -193,7 +197,7 @@ export async function prepareBuild(): Promise<BuildResult> {
     await copyBuildInputs(root);
     runBuildCommand("npm", ["ci"], root);
     runBuildCommand(process.execPath, ["scripts/build.ts"], root);
-    return { root, artifact: artifactFingerprint(root), ...toolchain() };
+    return { root, artifact: artifactFingerprint(root), ...toolchain(root) };
   } catch (error) {
     await rm(root, { recursive: true, force: true });
     throw error;
@@ -336,9 +340,15 @@ export function releaseNotes(changelog: string, version: string): string {
   if (!notes) throw new Error(`CHANGELOG section for ${version} is empty`);
   return notes;
 }
-async function printNotes(tag: string): Promise<void> {
+/** The notes come from the tagged CHANGELOG, never from the working copy. */
+function printNotes(tag: string): void {
   if (!tag.startsWith("v")) throw new Error("Release tags start with v");
-  const changelog = await readFile("CHANGELOG.md", "utf8");
+  let changelog: string;
+  try {
+    changelog = git(["show", `refs/tags/${tag}:CHANGELOG.md`]);
+  } catch {
+    throw new Error(`No CHANGELOG.md at tag ${tag}`);
+  }
   console.log(releaseNotes(changelog, tag.slice(1)));
 }
 const usage = "Usage: node scripts/release.ts [--verify-tag TAG | --notes TAG]";
@@ -348,8 +358,7 @@ export async function releaseMain(
   const [option, tag] = args.slice(2);
   if (args.length === 4 && tag && option === "--verify-tag")
     await verifyTag(tag);
-  else if (args.length === 4 && tag && option === "--notes")
-    await printNotes(tag);
+  else if (args.length === 4 && tag && option === "--notes") printNotes(tag);
   else if (args.length === 2) await createRelease();
   else throw new Error(usage);
 }

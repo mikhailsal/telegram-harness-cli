@@ -85,9 +85,17 @@ publish it to npm.
 
 The workflow has read-only repository access, so it does not create the GitHub
 release. Once its check passes, create the release with the version's CHANGELOG
-section as the notes, which `node scripts/release.ts --notes vX.Y.Z` prints:
+section as the notes, which `node scripts/release.ts --notes vX.Y.Z` prints from
+the tagged commit. `gh release create --verify-tag` only checks that the tag
+exists, so first confirm that the tag on GitHub still points at the commit the
+workflow checked and that this check passed:
 
 ```sh
-notes=$(node scripts/release.ts --notes vX.Y.Z) &&
-  gh release create vX.Y.Z --verify-tag --title vX.Y.Z --notes "$notes"
+tag=vX.Y.Z
+commit=$(git rev-parse "$tag^{commit}") &&
+  test "$(git ls-remote origin "refs/tags/$tag^{}" | cut -f1)" = "$commit" &&
+  test "$(gh run list --workflow release.yml --commit "$commit" \
+    --json conclusion --jq '.[0].conclusion')" = success &&
+  notes=$(node scripts/release.ts --notes "$tag") &&
+  gh release create "$tag" --verify-tag --title "$tag" --notes "$notes"
 ```
