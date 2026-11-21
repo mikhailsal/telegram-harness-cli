@@ -98,19 +98,29 @@ async function unitHolds(
   }
 }
 /**
- * Stops the bridge `pid` through systemd when it is this folder's running
- * service, so the unit reports "deactivating" until it exits and a later
- * `systemctl start` waits for that. Signalling the process directly would leave
- * the unit "active" meanwhile, and init would take the bridge for a running one.
- * Returns false when systemd does not run it or could not be asked; the caller
- * then signals the process itself.
+ * Stops the bridge `pid` through systemd when it is the running service of the
+ * folder under one of the names in `directories`, so the unit reports
+ * "deactivating" until it exits and a later `systemctl start` waits for that.
+ * Signalling the process directly would leave the unit "active" meanwhile, and
+ * init would take the bridge for a running one. Only a unit whose main process
+ * is `pid` is stopped, so a name that is not the folder's is harmless. Returns
+ * false when systemd does not run it or could not be asked; the caller then
+ * signals the process itself.
  */
 export async function requestServiceStop(
-  directory: string,
+  directories: readonly string[],
   deps: CliDependencies,
   pid: number,
 ): Promise<boolean> {
-  if (!(await unitHolds(directory, deps, pid, "active"))) return false;
+  for (const directory of directories)
+    if (await unitHolds(directory, deps, pid, "active"))
+      return stopUnit(directory, deps);
+  return false;
+}
+async function stopUnit(
+  directory: string,
+  deps: CliDependencies,
+): Promise<boolean> {
   try {
     await deps.exec(
       "systemctl",

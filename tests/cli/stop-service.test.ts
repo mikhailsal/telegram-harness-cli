@@ -46,9 +46,9 @@ interface Bridge {
  * A bridge stand-in that holds the folder lock. The first SIGTERM releases the
  * lock and exits 100 ms later; each SIGTERM is counted.
  */
-async function bridge(root: string): Promise<Bridge> {
+async function bridge(root: string, exitMs = 100): Promise<Bridge> {
   const module = pathToFileURL(join(process.cwd(), "src/core/lock.ts")).href;
-  const code = `import { acquireDirectoryLock } from ${JSON.stringify(module)}; const lease = await acquireDirectoryLock(process.argv[1]); let terms = 0; process.on('SIGTERM', () => { terms += 1; console.log('TERM'); if (terms === 1) lease.release().then(() => setTimeout(() => process.exit(0), 100)); }); console.log('READY'); setInterval(() => {}, 1000);`;
+  const code = `import { acquireDirectoryLock } from ${JSON.stringify(module)}; const lease = await acquireDirectoryLock(process.argv[1]); let terms = 0; process.on('SIGTERM', () => { terms += 1; console.log('TERM'); if (terms === 1) lease.release().then(() => setTimeout(() => process.exit(0), ${String(exitMs)})); }); console.log('READY'); setInterval(() => {}, 1000);`;
   const child = spawn(
     process.execPath,
     ["--input-type=module", "-e", code, root],
@@ -124,6 +124,23 @@ async function folder(): Promise<string> {
   roots.push(root);
   return root;
 }
+function unitFor(directory: string): string {
+  const id = createHash("sha256").update(directory).digest("hex").slice(0, 24);
+  return `thc-${id}.service`;
+}
+/** systemd with one active unit, `name`, whose main process is `pid`. */
+function onlyUnit(name: string, pid: number): Systemd {
+  const unit = systemd("active", pid);
+  const inner = unit.deps.exec;
+  unit.deps.exec = (file, args, options) =>
+    args.includes("show") && !args.includes(name)
+      ? Promise.resolve({
+          stdout: "ActiveState=inactive\nMainPID=0\n",
+          stderr: "",
+        })
+      : inner(file, args, options);
+  return unit;
+}
 function dead(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -186,16 +203,23 @@ it("signals the bridge itself when systemd cannot be asked", async () => {
 
 it("does not wait for a bridge that started after the stopped one exited", async () => {
   const root = await folder();
-  const running = await bridge(root);
+  // The stopped bridge exits a second after the signal, so thc stop is already
+  // waiting when it goes.
+  const running = await bridge(root, 1000);
   const unit = systemd("active", running.pid);
   let next: Bridge | undefined;
   let clock = 0;
   unit.deps.now = () => (clock += 1000);
   // The restarted service takes the folder lock as soon as the old bridge is
-  // gone, before thc stop looks again.
+  // gone, before thc stop looks again. Waiting for that inside one sleep keeps
+  // a slow machine from spending the fake clock, which advances per look, and
+  // from letting the old bridge exit between this check and thc stop's.
   unit.deps.sleep = async (ms) => {
     await new Promise((resolve) => setTimeout(resolve, ms));
-    if (!next && dead(running.pid)) next = await bridge(root);
+    if (next) return;
+    while (!dead(running.pid))
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    next = await bridge(root);
   };
   await stop(root, unit.deps);
   expect(next).toBeDefined();
@@ -222,22 +246,30 @@ it("finds the service under the folder name thc init gave it", async () => {
       store.setCursor("entity-id", "entity");
       store.close();
     }
-    const id = createHash("sha256")
-      .update(legacy ? alias : root)
-      .digest("hex")
-      .slice(0, 24);
-    const name = `thc-${id}.service`;
+    const name = unitFor(legacy ? alias : root);
     const running = await bridge(root);
-    const unit = systemd("active", running.pid);
-    const inner = unit.deps.exec;
-    unit.deps.exec = (file, args, options) =>
-      args.includes("show") && !args.includes(name)
-        ? Promise.resolve({
-            stdout: "ActiveState=inactive\nMainPID=0\n",
-            stderr: "",
-          })
-        : inner(file, args, options);
+    const unit = onlyUnit(name, running.pid);
     await stop(legacy ? root : alias, unit.deps);
+    expect(unit.calls).toContain(`systemctl --user stop --no-block ${name}`);
+    expect(running.terms()).toBe(1);
+  }
+});
+
+it("finds a legacy service by the symlinked path it is given when the store does not name it", async () => {
+  // Regression (#21): without a store identity the folder resolved to its real
+  // path only, so a unit set up under the symlink was missed and the bridge was
+  // signalled while systemd kept the unit active.
+  for (const identity of ["no store", "no saved folder"]) {
+    const root = await realpath(await folder());
+    const alias = join(await folder(), "alias");
+    await symlink(root, alias);
+    await mkdir(join(root, ".thc"));
+    if (identity === "no saved folder")
+      new Store(join(root, ".thc", "store.db")).close();
+    const name = unitFor(alias);
+    const running = await bridge(root);
+    const unit = onlyUnit(name, running.pid);
+    await stop(alias, unit.deps);
     expect(unit.calls).toContain(`systemctl --user stop --no-block ${name}`);
     expect(running.terms()).toBe(1);
   }
@@ -276,7 +308,7 @@ it("asks systemd only about an active unit whose main process is the bridge", as
   ];
   for (const [state, mainPid, asked] of cases) {
     const unit = systemd(state, mainPid, true);
-    expect(await requestServiceStop("/srv/bot", unit.deps, process.pid)).toBe(
+    expect(await requestServiceStop(["/srv/bot"], unit.deps, process.pid)).toBe(
       false,
     );
     expect(unit.calls.some((call) => call.includes(" stop "))).toBe(asked);
