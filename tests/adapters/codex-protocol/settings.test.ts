@@ -26,6 +26,14 @@ const model = (id: string, hidden = false) => ({
     { reasoningEffort: "low", description: "fast" },
     { reasoningEffort: "medium", description: "balanced" },
   ],
+  ...(id === "alpha"
+    ? {
+        serviceTiers: [
+          { id: "priority", name: "Fast", description: "2x speed" },
+          { id: "flex", name: "Flex" },
+        ],
+      }
+    : {}),
 });
 function result(request: Request): unknown {
   switch (request.method) {
@@ -113,6 +121,12 @@ it("lists every model page, hidden ones flagged, and reads the thread settings",
       reasoningEffort: "medium",
       description: "balanced",
     });
+    // Tiers keep Codex's ids; an older Codex without the field lists none.
+    expect(models[0]?.serviceTiers).toEqual([
+      { id: "priority", name: "Fast", description: "2x speed" },
+      { id: "flex", name: "Flex", description: "" },
+    ]);
+    expect(models[1]?.serviceTiers).toEqual([]);
     const lists = fixture.calls.filter((call) => call.method === "model/list");
     expect(lists.map((call) => call.params?.cursor)).toEqual([
       undefined,
@@ -135,12 +149,24 @@ it("sends model and effort on turn/start only when settings are given", async ()
     await fixture.adapter.submit({
       correlationId: "b",
       text: "switched",
-      settings: { model: "beta", effort: "low" },
+      settings: { model: "beta", effort: "low", serviceTier: "priority" },
+    });
+    await fixture.adapter.submit({
+      correlationId: "c",
+      text: "standard",
+      settings: { serviceTier: null },
     });
     const starts = fixture.calls.filter((call) => call.method === "turn/start");
     expect(starts[0]?.params).not.toHaveProperty("model");
     expect(starts[0]?.params).not.toHaveProperty("effort");
-    expect(starts[1]?.params).toMatchObject({ model: "beta", effort: "low" });
+    expect(starts[0]?.params).not.toHaveProperty("serviceTier");
+    expect(starts[1]?.params).toMatchObject({
+      model: "beta",
+      effort: "low",
+      serviceTier: "priority",
+    });
+    // null, not a missing key: Codex keeps a tier until a turn clears it.
+    expect(starts[2]?.params).toHaveProperty("serviceTier", null);
   } finally {
     await fixture.close();
   }

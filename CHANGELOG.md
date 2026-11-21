@@ -3,6 +3,22 @@
 All notable changes to `thc` are listed here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `/fast` turns Codex's fast service tier on or off for the next turns, the
+  queued ones included. `/fast on` uses the tier the current model offers as
+  Fast; `/fast off` returns to the standard tier. Model changes keep it, and
+  the confirmation says so when the new model does not list that tier.
+- The live status of a Telegram turn names the model, effort and fast tier
+  it was sent with, so a `/model`, `/effort` or `/fast` change shows when it
+  takes effect.
+- `thc doctor` says whether the installed Codex answers the `model/list` call
+  that `/model` and `/effort` need, under `version.modelList`. Before, it only
+  compared the version with the tested baseline, so an owner sent to doctor by
+  the "cannot list models" reply learned nothing about model switching.
+
 ## [0.1.3] - 2026-11-21
 
 ### Fixed

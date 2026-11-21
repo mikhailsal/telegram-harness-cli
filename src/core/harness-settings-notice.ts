@@ -128,8 +128,18 @@ async function sendNotice(
     );
 }
 
+const tier = (language: Language, value: string | null | undefined) =>
+  value === undefined
+    ? undefined
+    : value === null
+      ? fill(language, "tierStandard")
+      : fill(language, "tierFast", { tier: value });
 const described = (language: Language, settings: HarnessSettings) =>
-  [settings.model, settings.effort && `effort ${settings.effort}`]
+  [
+    settings.model,
+    settings.effort && `effort ${settings.effort}`,
+    tier(language, settings.serviceTier),
+  ]
     .filter(Boolean)
     .join(" · ") || effortLabel(language, undefined);
 

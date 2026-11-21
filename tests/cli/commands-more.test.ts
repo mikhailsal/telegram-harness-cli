@@ -55,6 +55,8 @@ beforeEach(() => {
       output += value;
     },
     exec: () => Promise.resolve({ stdout: "yes", stderr: "" }),
+    // Never the Codex daemon of the machine running the tests.
+    listCodexModels: () => Promise.resolve(),
   };
 });
 afterEach(() => {

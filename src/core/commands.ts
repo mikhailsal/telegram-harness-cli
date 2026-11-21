@@ -76,7 +76,7 @@ export class Commands {
   }
   private async settingsCommand(event: Command): Promise<boolean> {
     if (event.command === "format") await showFormat(this.ctx, event);
-    else if (["model", "effort"].includes(event.command))
+    else if (["model", "effort", "fast"].includes(event.command))
       await runSettingsCommand(this.ctx, this.delivery.serialize, event);
     else return false;
     return true;

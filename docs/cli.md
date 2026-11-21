@@ -166,6 +166,10 @@ previews in the tested Telegram client.
 
 With the protocol adapter, `/model` and `/effort` switch the model and the
 reasoning effort of the next turns. They need codex-cli 0.169.0 or newer.
+`thc doctor` reports it under `version.modelList`: `supported` when the Codex
+daemon answers `model/list`, `unsupported` for an older Codex, and `unavailable`
+when the daemon is not running. Doctor never starts the daemon; it waits at most
+5 seconds for the answer.
 
 | Telegram command          | Result                                                                                   |
 | ------------------------- | ---------------------------------------------------------------------------------------- |
@@ -174,6 +178,7 @@ reasoning effort of the next turns. They need codex-cli 0.169.0 or newer.
 | `/model default`          | Pins the model Codex marks as default, with its default effort                           |
 | `/model reset`            | Stops sending a model or effort; the thread keeps its current setting                    |
 | `/effort`, `/effort high` | Card or direct change for the current model's efforts                                    |
+| `/fast`                   | Toggles Codex's fast service tier; `/fast on` and `/fast off` set it                     |
 
 A choice applies from the next turn, queued messages included; a running turn
 keeps its settings, and in Steer mode follow-ups join it. Telegram's choice
@@ -181,12 +186,27 @@ wins: while one is set, every Telegram turn sends it, even after a `/model` in
 the attached TUI. Without one, the bridge sends nothing and TUI changes stay in
 force. `/status` shows the running model, the Telegram override and a note when
 they differ. If Codex rejects the chosen model, the failed message is not
-resent, queued messages wait, and a notice offers one tap back to Codex's
-default. The tmux adapter cannot switch models.
+resent, queued messages wait until a `/model` or `/effort` choice releases them
+(`/fast` does not), and a notice offers one tap back to Codex's default. The
+tmux adapter cannot switch models.
+
+`/fast on` sends the current model's tier that Codex names Fast with every
+Telegram turn (`priority`, "2x speed, increased usage", in codex-cli 0.169.0);
+a model that lists no tier refuses it. `/fast off` sends the standard tier,
+which also overrides a `service_tier` set in Codex's config. Codex keeps the
+tier for the thread's later turns until a turn changes it. `/model` and `/model reset` keep the fast setting. When
+a `/model` choice picks a model that does not list that tier, the confirmation
+says so, since every turn still asks for it; `/model reset` sends no model, so
+it only says the setting stays on. `/status` shows the fast setting with the
+override.
+The live status of a Telegram turn names the model, effort and fast tier it was
+sent with, as in `💭 Thinking 0:12 · gpt-6.1-sol · effort high · fast`; a turn
+sent without an override names none.
 
 `thc tail` reads `.thc/bridge.log`. `setting.applied` records applied mode,
 format and model (`harness`) changes, and `turn.execution` records the effective
-settings, including the `model` and `effort` sent (or `none`), before a
+settings, including the `model`, `effort` and `serviceTier` sent (or `none`;
+`standard` after `/fast off`), before a
 submission or steering attempt. Their durable audit entries are also stored in
 `.thc/store.db` under `meta` keys `setting-applied/UPDATE_ID` and
 `turn-execution/TURN_ID/submit|steer`, so log rotation does not erase them.

@@ -1,51 +1,5 @@
 # TODOS
 
-## Telegram
-
-### Service tier (`/fast`) toggle
-
-**What:** a `/fast` command that sets `serviceTier` on `turn/start`.
-
-**Why:** Codex exposes service tiers per model (`model/list` `serviceTiers`); owners who switch models may also want speed tiers.
-
-**Pros:** reuses the `/model` settings path. **Cons:** another knob; tier ids vary by account.
-
-**Context:** deferred from the model/effort plan (`docs/designs/telegram-model-effort.md`, row E4). Start from `harness-settings/desired`.
-
-**Effort:** human S / CC S
-**Priority:** P3
-**Depends on:** None (the model/effort commands shipped in 0.1.0)
-
-### Show model and effort in the live status draft
-
-**What:** add the active model/effort to the per-turn status message.
-
-**Why:** confirms at a glance which model is answering.
-
-**Pros:** visible proof a switch took effect. **Cons:** touches `src/core/status.ts`, a hot file.
-
-**Context:** deferred from the model/effort plan (row E6).
-
-**Effort:** human S / CC S
-**Priority:** P3
-**Depends on:** None (the model/effort commands shipped in 0.1.0)
-
-## CLI
-
-### thc doctor: report whether model switching is supported
-
-**What:** `thc doctor` checks that the installed Codex answers `model/list` (codex-cli 0.169.0 or newer) and says so next to the tested-baseline line.
-
-**Why:** an owner who gets `settingsUnsupported` runs `thc doctor`, as the reply tells them to. Doctor only compares the installed Codex version with the tested baseline (`src/cli/admin.ts:137`), so it shows a version mismatch and no word about model switching.
-
-**Pros:** the error's fix line leads to a real answer. **Cons:** one more RPC in doctor; it needs the app-server running.
-
-**Context:** DX review of the model/effort plan (`docs/designs/telegram-model-effort.md`, DX-7). When this item was written the baseline was 0.166.0 and doctor reported "matches" on a Codex without `model/list`; 0.1.1 moved the baseline to 0.169.0, which removed that false "matches".
-
-**Effort:** human S / CC S
-**Priority:** P3
-**Depends on:** None (the model/effort commands shipped in 0.1.0)
-
 ## Distribution
 
 ### Install the latest release instead of main
@@ -62,7 +16,71 @@
 **Priority:** P2
 **Depends on:** a GitHub release for every version tag (the `gh release create` step in `docs/testing.md`)
 
+## Testing
+
+### The live self-check test times out on a loaded machine
+
+**What:** `tests/core/release-acceptance.test.ts` "checks live scenarios without modifying the isolated artifact" fails with `Test timed out in 60000ms` when the machine is busy.
+
+**Why:** the test copies `node_modules`, fingerprints the copy several times and runs a nested Vitest run, so its time grows with CPU load. Measured on 8 cores: 24 s idle, 53 s with 24 busy loops, and a timeout at 64 s with 40 busy loops. It failed once in `./quality check --all` during the /ship of `feat/settings-fast-status-doctor`, at a tree whose commit hook had passed it; that branch does not touch the test, `scripts/test-live.ts` or `tests/live/`.
+
+**Pros:** a red gate on a busy machine stops being noise. **Cons:** a longer timeout raises a test limit, which needs the owner's agreement; a cheaper test would have to keep the tamper check that the fingerprints provide.
+
+**Context:** the nested run already has its own 30 s cap (`spawnSync` in `scripts/test-live.ts`), so the 60 s test timeout mostly bounds the copying and hashing. Options: raise the timeout with these measurements, or fingerprint the copy fewer times.
+
+**Effort:** human S / CC S
+**Priority:** P1
+**Depends on:** the owner's decision on raising the timeout
+
 ## Completed
+
+### Show model and effort in the live status draft
+
+**What:** add the active model/effort to the per-turn status message.
+
+**Why:** confirms at a glance which model is answering.
+
+**Pros:** visible proof a switch took effect. **Cons:** touches `src/core/status.ts`, a hot file.
+
+**Context:** deferred from the model/effort plan (row E6).
+
+**Effort:** human S / CC S
+**Priority:** P3
+**Depends on:** None (the model/effort commands shipped in 0.1.0)
+
+**Completed:** unreleased (2026-11-21). The first status line of a Telegram turn names the model, effort and fast tier from its `turn-execution/<turn>/submit` record (`src/core/status-settings.ts`), which submitTurn now writes before the first status frame. A turn sent without an override names none.
+
+### Service tier (`/fast`) toggle
+
+**What:** a `/fast` command that sets `serviceTier` on `turn/start`.
+
+**Why:** Codex exposes service tiers per model (`model/list` `serviceTiers`); owners who switch models may also want speed tiers.
+
+**Pros:** reuses the `/model` settings path. **Cons:** another knob; tier ids vary by account.
+
+**Context:** deferred from the model/effort plan (`docs/designs/telegram-model-effort.md`, row E4). Start from `harness-settings/desired`.
+
+**Effort:** human S / CC S
+**Priority:** P3
+**Depends on:** None (the model/effort commands shipped in 0.1.0)
+
+**Completed:** unreleased (2026-11-21). `/fast` toggles and `/fast on|off` sets the tier (`src/core/harness-settings-tier.ts`). On sends the current model's tier that Codex names Fast, off sends `serviceTier: null`, which a live probe of codex-cli 0.169.0 showed returns the thread to the standard tier even over a `service_tier` in its config. The tier is stored in `harness-settings/desired` and model changes keep it.
+
+### thc doctor: report whether model switching is supported
+
+**What:** `thc doctor` checks that the installed Codex answers `model/list` (codex-cli 0.169.0 or newer) and says so next to the tested-baseline line.
+
+**Why:** an owner who gets `settingsUnsupported` runs `thc doctor`, as the reply tells them to. Doctor only compares the installed Codex version with the tested baseline (`src/cli/admin.ts:137`), so it shows a version mismatch and no word about model switching.
+
+**Pros:** the error's fix line leads to a real answer. **Cons:** one more RPC in doctor; it needs the app-server running.
+
+**Context:** DX review of the model/effort plan (`docs/designs/telegram-model-effort.md`, DX-7). When this item was written the baseline was 0.166.0 and doctor reported "matches" on a Codex without `model/list`; 0.1.1 moved the baseline to 0.169.0, which removed that false "matches".
+
+**Effort:** human S / CC S
+**Priority:** P3
+**Depends on:** None (the model/effort commands shipped in 0.1.0)
+
+**Completed:** unreleased (2026-11-21). `thc doctor` reports `version.modelList` (`src/cli/doctor-codex.ts`): `supported`, `unsupported` for a Codex without `model/list`, or `unavailable` when the Codex daemon is not running. It never starts the daemon.
 
 ### A second `thc stop` kills the bridge mid-shutdown
 

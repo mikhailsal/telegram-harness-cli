@@ -221,7 +221,7 @@ it("commits nothing when another change lands while the list is read", async () 
   expect(f.texts()[0]).toContain("changed while this command waited");
 });
 
-it("mentions /model and /effort in help, in both languages", async () => {
+it("mentions /model, /effort and /fast in help, in both languages", async () => {
   for (const language of ["en", "ru"] as const) {
     const f = settingsFixture();
     await new Commands(f.ctx, { finish: () => false }).run({
@@ -229,6 +229,6 @@ it("mentions /model and /effort in help, in both languages", async () => {
       command: "help",
       language,
     });
-    expect(f.texts()[0]).toMatch(/\/model.*\/effort/u);
+    expect(f.texts()[0]).toMatch(/\/model.*\/effort.*\/fast/u);
   }
 });

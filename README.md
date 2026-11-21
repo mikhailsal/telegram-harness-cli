@@ -12,7 +12,8 @@ guarded tmux runner. Both were first measured on Codex CLI 0.166.0 in the
 
 The tmux runner disables Codex's interactive startup update check for its
 owned sessions. Manage Codex versions outside those sessions and use `thc doctor`
-to compare the installed version with the tested baseline.
+to compare the installed version with the tested baseline and to check that it
+answers the `model/list` call that `/model` needs.
 
 ## Getting started
 

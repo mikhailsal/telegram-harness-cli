@@ -9,6 +9,7 @@ import { turnDraftId } from "./turn-draft.js";
 import { replySourceMessageId } from "./reply-target.js";
 import { isCompactionOnly } from "./compaction.js";
 import { turnChatId } from "./format.js";
+import { sentSettings } from "./status-settings.js";
 
 interface Activity {
   kind: "thinking" | "command" | "read" | "file-change" | "compacting";
@@ -129,7 +130,8 @@ export class TurnStatuses {
         (row) => row.entityId === this.ctx.entityId && row.id !== turn.id,
       ).length;
     const delay = elapsed(new Date(this.lastEvent).toISOString(), now);
-    return `${this.label(turn, now)} ${elapsed(turn.status === "queued" ? turn.createdAt : turn.updatedAt, now)}${stalled ? ` · ${strings.stalled} ${delay}\n${strings.stalledHint}` : ""}${count ? `\n${strings.queue}: ${String(count)}` : ""}`;
+    const sent = sentSettings(this.ctx.store, turn.id, strings);
+    return `${this.label(turn, now)} ${elapsed(turn.status === "queued" ? turn.createdAt : turn.updatedAt, now)}${sent ? ` · ${sent}` : ""}${stalled ? ` · ${strings.stalled} ${delay}\n${strings.stalledHint}` : ""}${count ? `\n${strings.queue}: ${String(count)}` : ""}`;
   }
   private status(turn: Turn): ChannelStatus | undefined {
     const old = this.rows.get(turn.id);

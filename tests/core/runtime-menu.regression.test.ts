@@ -60,6 +60,7 @@ it("registers a default English menu as well as English and Russian overrides", 
       "format",
       "model",
       "effort",
+      "fast",
       "help",
     ]);
     expect(call.signal.aborted).toBe(false);
@@ -106,6 +107,7 @@ it("replaces a legacy private-chat menu that overrides the global menu", async (
     "format",
     "model",
     "effort",
+    "fast",
     "help",
   ]);
 });

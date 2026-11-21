@@ -12,6 +12,13 @@ export type AdapterCapability =
 export interface HarnessSettings {
   model?: string;
   effort?: string;
+  // A service tier id; null puts the thread back on the standard tier.
+  serviceTier?: string | null;
+}
+export interface HarnessServiceTier {
+  id: string;
+  name: string;
+  description: string;
 }
 export interface HarnessModel {
   id: string;
@@ -22,6 +29,7 @@ export interface HarnessModel {
   isDefault: boolean;
   defaultReasoningEffort: string;
   supportedReasoningEfforts: { reasoningEffort: string; description: string }[];
+  serviceTiers: HarnessServiceTier[];
 }
 export interface AdapterInput {
   correlationId: string;

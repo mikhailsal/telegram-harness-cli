@@ -93,6 +93,17 @@ export const modelList = z
               })
               .loose(),
           ),
+          serviceTiers: z
+            .array(
+              z
+                .object({
+                  id: z.string(),
+                  name: z.string(),
+                  description: z.string().catch(""),
+                })
+                .loose(),
+            )
+            .catch([]),
         })
         .loose(),
     ),

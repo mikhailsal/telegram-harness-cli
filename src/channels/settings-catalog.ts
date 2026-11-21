@@ -1,6 +1,6 @@
 import type { Language } from "./types.js";
 
-// Replies of /model and /effort. `{name}` marks a value filled by `fill`.
+// Replies of /model, /effort and /fast. `{name}` marks a value filled by `fill`.
 export const settingsCatalog = {
   en: {
     modelCard: "Codex model: {model} · effort {effort}. Pick a model:",
@@ -59,6 +59,18 @@ export const settingsCatalog = {
     statusPending: "pending: applies from the next turn",
     statusDiffers:
       "differs from the running thread (changed in the TUI?); the next Telegram turn applies the override",
+    fastApplied:
+      "✓ Fast mode on for {model} ({tier}). Applies from the next turn, including queued messages.",
+    fastOff:
+      "✓ Fast mode off: the standard tier applies from the next turn, including queued messages.",
+    noFastTier: "{model} offers no fast tier. Nothing changed.",
+    fastUsage:
+      '"{input}" is not a /fast option. Use /fast, /fast on or /fast off. Nothing changed.',
+    fastKept: "Fast mode stays on; /fast off turns it off.",
+    fastUnlisted:
+      "{model} does not list the {tier} tier, but fast mode stays on and each turn still asks for it; /fast off turns it off.",
+    tierFast: "fast mode ({tier})",
+    tierStandard: "fast mode off",
   },
   ru: {
     modelCard: "Модель Codex: {model} · глубина {effort}. Выбери модель:",
@@ -118,6 +130,18 @@ export const settingsCatalog = {
     statusPending: "ожидает: действует со следующей задачи",
     statusDiffers:
       "отличается от текущего разговора (изменено в TUI?); следующая задача из Telegram применит переопределение",
+    fastApplied:
+      "✓ Быстрый режим для {model} включён ({tier}). Действует со следующей задачи, включая сообщения в очереди.",
+    fastOff:
+      "✓ Быстрый режим выключен: со следующей задачи, включая сообщения в очереди, действует обычная скорость.",
+    noFastTier: "У {model} нет быстрого режима. Ничего не изменилось.",
+    fastUsage:
+      '"{input}" — такого варианта у /fast нет. Используй /fast, /fast on или /fast off. Ничего не изменилось.',
+    fastKept: "Быстрый режим остаётся включённым; выключить: /fast off.",
+    fastUnlisted:
+      "У {model} нет режима {tier}, но быстрый режим остаётся включённым и каждая задача его запрашивает; выключить: /fast off.",
+    tierFast: "быстрый режим ({tier})",
+    tierStandard: "быстрый режим выключен",
   },
 } satisfies Record<Language, Record<string, string>>;
 type Assert<T extends true> = T;
