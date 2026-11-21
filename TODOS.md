@@ -1,21 +1,5 @@
 # TODOS
 
-## Telegram
-
-### Show model and effort in the live status draft
-
-**What:** add the active model/effort to the per-turn status message.
-
-**Why:** confirms at a glance which model is answering.
-
-**Pros:** visible proof a switch took effect. **Cons:** touches `src/core/status.ts`, a hot file.
-
-**Context:** deferred from the model/effort plan (row E6).
-
-**Effort:** human S / CC S
-**Priority:** P3
-**Depends on:** None (the model/effort commands shipped in 0.1.0)
-
 ## Distribution
 
 ### Install the latest release instead of main
@@ -33,6 +17,22 @@
 **Depends on:** a GitHub release for every version tag (the `gh release create` step in `docs/testing.md`)
 
 ## Completed
+
+### Show model and effort in the live status draft
+
+**What:** add the active model/effort to the per-turn status message.
+
+**Why:** confirms at a glance which model is answering.
+
+**Pros:** visible proof a switch took effect. **Cons:** touches `src/core/status.ts`, a hot file.
+
+**Context:** deferred from the model/effort plan (row E6).
+
+**Effort:** human S / CC S
+**Priority:** P3
+**Depends on:** None (the model/effort commands shipped in 0.1.0)
+
+**Completed:** unreleased (2026-11-21). The first status line of a Telegram turn names the model, effort and fast tier from its `turn-execution/<turn>/submit` record (`src/core/status-settings.ts`), which submitTurn now writes before the first status frame. A turn sent without an override names none.
 
 ### Service tier (`/fast`) toggle
 

@@ -15,6 +15,7 @@ import { settingsIdle } from "../../src/core/harness-settings-runner.js";
 import { knownCommands, normalizeEvent } from "../../src/core/queue.js";
 import { registerMenus } from "../../src/core/runtime-menu.js";
 import { applySetting } from "../../src/core/settings-audit.js";
+import { TurnStatuses } from "../../src/core/status.js";
 import { openStore } from "../../src/store/index.js";
 import {
   catalogModels,
@@ -159,6 +160,26 @@ it("sends the desired settings on every turn and records exactly what was sent",
   expect(f.store.getCursor("harness-settings/sent")).toBe(
     JSON.stringify({ model: "beta", effort: "low" }),
   );
+});
+
+it("records what a turn is sent with before its first status frame", async () => {
+  const f = setup();
+  const seen: (string | undefined)[] = [];
+  const refresh = vi
+    .spyOn(TurnStatuses.prototype, "refresh")
+    .mockImplementation(() => {
+      const [turn] = f.store.listTurns(["submitting"]);
+      if (turn)
+        seen.push(f.store.getCursor(`turn-execution/${turn.id}/submit`));
+    });
+  try {
+    applySetting(f.context, audit, "harness", { model: "beta" });
+    await f.engine.accept([message(1, "plain")], 2);
+    // protects=the first status frame can name the settings sent; fails_when=the execution record is written after the first refresh; no_claim=the rendered text (status.test covers it)
+    expect(seen[0]).toContain('"model":"beta"');
+  } finally {
+    refresh.mockRestore();
+  }
 });
 
 it("holds queued turns after modelNotFound until the owner taps recover", async () => {

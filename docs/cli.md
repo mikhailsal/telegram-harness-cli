@@ -195,6 +195,9 @@ a model that lists no tier refuses it. `/fast off` sends the standard tier,
 which also overrides a `service_tier` set in Codex's config. Codex keeps the
 tier for the thread's later turns until a turn changes it. `/model` and
 `/model reset` keep the fast setting, and `/status` shows it with the override.
+The live status of a Telegram turn names the model, effort and fast tier it was
+sent with, as in `💭 Thinking 0:12 · gpt-6.1-sol · effort high · fast`; a turn
+sent without an override names none.
 
 `thc tail` reads `.thc/bridge.log`. `setting.applied` records applied mode,
 format and model (`harness`) changes, and `turn.execution` records the effective

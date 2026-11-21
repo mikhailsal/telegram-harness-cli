@@ -236,3 +236,37 @@ it("labels a continued terminal turn as continuing, not as a terminal task", asy
     store.close();
   }
 });
+
+it("names the model, effort and fast tier Telegram sent on the first status line", async () => {
+  const { store, draft, statuses, id } = setup();
+  try {
+    const record = (values: Record<string, string>) => {
+      store.setCursor(`turn-execution/${id}/submit`, JSON.stringify(values));
+    };
+    record({ model: "beta", effort: "low", serviceTier: "priority" });
+    statuses.refresh();
+    await vi.advanceTimersByTimeAsync(1);
+    // protects=the live status proves which settings the turn was sent with; fails_when=the label is missing or lands after the stall or queue lines; no_claim=Telegram rendering (channel is a mock)
+    expect(String(draft.mock.lastCall?.[2]).split("\n")[0]).toMatch(
+      /^💭 Thinking \S+ · beta · effort low · fast$/u,
+    );
+    store.setCursor("language", "ru");
+    record({ model: "none", effort: "high", serviceTier: "standard" });
+    statuses.refresh();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(draft.mock.lastCall?.[2]).toMatch(/ · глубина high$/u);
+    // A turn sent with Codex's own settings, or a damaged record, shows none.
+    for (const raw of [
+      JSON.stringify({ model: "none", effort: "none", serviceTier: "none" }),
+      "{broken",
+    ]) {
+      store.setCursor(`turn-execution/${id}/submit`, raw);
+      statuses.refresh();
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(draft.mock.lastCall?.[2]).toMatch(/^💭 Думаю \S+$/u);
+    }
+  } finally {
+    await statuses.close();
+    store.close();
+  }
+});

@@ -78,10 +78,11 @@ export async function submitTurn(
   )
     return;
   ctx.persistAdapter();
+  // Recorded before the first status frame, which names the settings sent.
+  recordExecution(ctx, turn, "submit", settings);
+  ctx.store.setCursor(sentCursor, JSON.stringify(settings ?? {}));
   statuses.refresh();
   try {
-    recordExecution(ctx, turn, "submit", settings);
-    ctx.store.setCursor(sentCursor, JSON.stringify(settings ?? {}));
     const result = await ctx.adapter.submit({
       correlationId: turn.id,
       text,
