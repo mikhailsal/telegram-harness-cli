@@ -1,10 +1,17 @@
 import { expect, it } from "vitest";
 import { Commands } from "../../src/core/commands.js";
-import { settingsIdle } from "../../src/core/harness-settings-runner.js";
-import { desiredSettings } from "../../src/core/settings-audit.js";
+import {
+  settingsHeld,
+  settingsIdle,
+} from "../../src/core/harness-settings-runner.js";
+import {
+  applySetting,
+  desiredSettings,
+} from "../../src/core/settings-audit.js";
 import {
   alpha,
   command,
+  decision,
   model,
   settingsFixture,
 } from "./harness-settings-fixture.js";
@@ -63,6 +70,40 @@ it("keeps the tier through model, effort and reset changes, and says so on reset
   await run(f, command("model", "reset", 6));
   expect(desired(f)).toEqual({ serviceTier: "priority" });
   expect(f.texts()[5]).toContain("Fast mode stays on; /fast off turns it off.");
+});
+
+// Value: protects=a model change that keeps fast mode on says so when the new model does not list the tier, by command and by card, and stays quiet when it does; fails_when=the notice is missing, shown for a listing model or dropped on the card path; why_new=no test read the model confirmation with fast mode on; seam=none; no_claim=what Codex does with an unlisted tier
+it("warns when the new model does not list the kept fast tier", async () => {
+  const f = settingsFixture({
+    models: [alpha(), model("beta", { serviceTiers: [] })],
+  });
+  await run(f, command("fast", "on"));
+  await run(f, command("model", "beta", 2));
+  const notice =
+    "beta does not list the priority tier, but fast mode stays on and each turn still asks for it; /fast off turns it off.";
+  expect(f.texts()[1]).toContain(notice);
+  await run(f, command("model", "alpha", 3));
+  expect(f.texts()[2]).not.toContain("does not list");
+  await run(f, command("model", "", 4));
+  await new Commands(f.ctx, { finish: () => false }).decision(
+    decision("model:1", 103, 50),
+  );
+  await settingsIdle(f.ctx);
+  expect(String(f.editMessageText.mock.lastCall?.[2])).toContain(notice);
+});
+
+// Value: protects=a modelNotFound queue hold survives /fast, which keeps the rejected model, and lifts on a model change; fails_when=a /fast write lifts the hold and the next queued message is sent to the rejected model, fails and is not resent; why_new=no test changed fast mode while the queue was held; seam=none; no_claim=the recover tap (harness-settings-cards covers it)
+it("keeps the queue held after modelNotFound when only fast mode changes", async () => {
+  const f = settingsFixture();
+  const audit = { updateId: 1, chatId: "1", userId: "1", sentAt: "" };
+  applySetting(f.ctx, audit, "harness", { model: "retired" });
+  f.store.setCursor("settings-blocked", "retired");
+  await run(f, command("fast", "off", 2));
+  expect(desired(f)).toEqual({ model: "retired", serviceTier: null });
+  expect(settingsHeld(f.ctx)).toBe(true);
+  await run(f, command("model", "beta", 3));
+  expect(settingsHeld(f.ctx)).toBe(false);
+  expect(f.store.getCursor("settings-blocked")).toBe("");
 });
 
 it("refuses a model without tiers and an unknown argument, changing nothing", async () => {

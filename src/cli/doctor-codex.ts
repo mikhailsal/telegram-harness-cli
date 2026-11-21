@@ -10,7 +10,8 @@ export const fixture = "0.169.0";
 const modelListBudgetMs = 5000;
 
 // One model/list call on its own connection to the Codex daemon. Doctor never
-// starts the daemon; aborting closes the connection, which settles every call.
+// starts the daemon; aborting drops the connection, which settles every call
+// even when the daemon hangs.
 export async function askModelList(
   socket: string,
   signal: AbortSignal,
@@ -20,7 +21,7 @@ export async function askModelList(
     () => undefined,
   );
   const abort = () => {
-    transport.close();
+    transport.terminate();
   };
   signal.addEventListener("abort", abort, { once: true });
   try {

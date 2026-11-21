@@ -41,7 +41,7 @@ export async function fastCommand(
     return;
   }
   if (wanted ? wanted === "off" : fastOn(state.desired)) {
-    commit(ctx, event, { ...state.desired, serviceTier: null });
+    commit(ctx, event, { ...state.desired, serviceTier: null }, false);
     await confirm(ctx, event, state, fill(event.language, "fastOff"));
   } else await turnOn(ctx, event, state);
 }
@@ -63,7 +63,7 @@ async function turnOn(
     );
     return;
   }
-  commit(ctx, event, { ...state.desired, serviceTier: tier.id });
+  commit(ctx, event, { ...state.desired, serviceTier: tier.id }, false);
   await confirm(
     ctx,
     event,

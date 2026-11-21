@@ -141,6 +141,11 @@ export class ProtocolTransport {
   close(): void {
     this.socket?.close();
   }
+  // Drops the connection without the closing handshake, which a hung peer
+  // never answers; every pending call then settles at once.
+  terminate(): void {
+    this.socket?.terminate();
+  }
   private receive(raw: string): void {
     let value: unknown;
     try {

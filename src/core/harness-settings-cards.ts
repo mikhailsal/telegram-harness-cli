@@ -27,6 +27,7 @@ import {
   effortConfirmation,
   modelConfirmation,
   resetLine,
+  tierLine,
 } from "./harness-settings-reply.js";
 
 type Decision = Extract<ChannelEvent, { kind: "decision" }>;
@@ -145,6 +146,7 @@ async function pickModel(
       effort: effortLabel(event.language, effort),
     }),
     resetLine(event.language, choice),
+    tierLine(ctx, event.language, state, model.id),
     ...afterChange(ctx, event, state),
   ]
     .filter(Boolean)

@@ -186,15 +186,18 @@ wins: while one is set, every Telegram turn sends it, even after a `/model` in
 the attached TUI. Without one, the bridge sends nothing and TUI changes stay in
 force. `/status` shows the running model, the Telegram override and a note when
 they differ. If Codex rejects the chosen model, the failed message is not
-resent, queued messages wait, and a notice offers one tap back to Codex's
-default. The tmux adapter cannot switch models.
+resent, queued messages wait until the model changes (`/fast` does not release
+them), and a notice offers one tap back to Codex's default. The tmux adapter
+cannot switch models.
 
 `/fast on` sends the current model's tier that Codex names Fast with every
 Telegram turn (`priority`, "2x speed, increased usage", in codex-cli 0.169.0);
 a model that lists no tier refuses it. `/fast off` sends the standard tier,
 which also overrides a `service_tier` set in Codex's config. Codex keeps the
 tier for the thread's later turns until a turn changes it. `/model` and
-`/model reset` keep the fast setting, and `/status` shows it with the override.
+`/model reset` keep the fast setting; when the new model does not list that
+tier, the confirmation says so, since every turn still asks for it. `/status`
+shows the fast setting with the override.
 The live status of a Telegram turn names the model, effort and fast tier it was
 sent with, as in `💭 Thinking 0:12 · gpt-6.1-sol · effort high · fast`; a turn
 sent without an override names none.

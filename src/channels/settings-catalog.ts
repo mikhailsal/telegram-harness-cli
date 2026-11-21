@@ -67,6 +67,8 @@ export const settingsCatalog = {
     fastUsage:
       '"{input}" is not a /fast option. Use /fast, /fast on or /fast off. Nothing changed.',
     fastKept: "Fast mode stays on; /fast off turns it off.",
+    fastUnlisted:
+      "{model} does not list the {tier} tier, but fast mode stays on and each turn still asks for it; /fast off turns it off.",
     tierFast: "fast mode ({tier})",
     tierStandard: "fast mode off",
   },
@@ -136,6 +138,8 @@ export const settingsCatalog = {
     fastUsage:
       '"{input}" — такого варианта у /fast нет. Используй /fast, /fast on или /fast off. Ничего не изменилось.',
     fastKept: "Быстрый режим остаётся включённым; выключить: /fast off.",
+    fastUnlisted:
+      "У {model} нет режима {tier}, но быстрый режим остаётся включённым и каждая задача его запрашивает; выключить: /fast off.",
     tierFast: "быстрый режим ({tier})",
     tierStandard: "быстрый режим выключен",
   },
