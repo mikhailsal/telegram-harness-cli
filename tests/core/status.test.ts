@@ -256,7 +256,10 @@ it("names the model, effort and fast tier Telegram sent on the first status line
     await vi.advanceTimersByTimeAsync(1000);
     expect(draft.mock.lastCall?.[2]).toMatch(/ · глубина high$/u);
     // A turn sent with Codex's own settings, or a damaged record, shows none.
+    // Value: protects=a valid-JSON execution record that is not an object (null, 5) shows no settings label; fails_when=the object guard is dropped and the status throws or mislabels; why_new=only malformed JSON was covered; seam=none; no_claim=Telegram rendering (channel is a mock)
     for (const raw of [
+      "null",
+      "5",
       JSON.stringify({ model: "none", effort: "none", serviceTier: "none" }),
       "{broken",
     ]) {

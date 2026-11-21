@@ -126,6 +126,7 @@ it("routes every menu command through ingress as a command, /model and /effort i
   });
 });
 
+// Value: protects=a turn sent with a fast tier id records serviceTier priority, one without records none, and the sent cursor holds the tier; fails_when=the tier is dropped or mislabelled in the record or cursor; why_new=no test asserted serviceTier in the execution record or sent cursor; seam=none; no_claim=Codex honouring the tier (adapter is a mock)
 it("sends the desired settings on every turn and records exactly what was sent", async () => {
   const f = setup();
   await f.engine.accept([message(1, "plain")], 2);
@@ -137,11 +138,16 @@ it("sends the desired settings on every turn and records exactly what was sent",
     cursor: "c1",
     text: "ok",
   });
-  applySetting(f.context, audit, "harness", { model: "beta", effort: "low" });
+  applySetting(f.context, audit, "harness", {
+    model: "beta",
+    effort: "low",
+    serviceTier: "priority",
+  });
   await f.engine.accept([message(3, "switched")], 4);
   expect(f.submit.mock.calls[1]?.[0].settings).toEqual({
     model: "beta",
     effort: "low",
+    serviceTier: "priority",
   });
   const executions = f.store
     .listTurns(["active", "completed"])
@@ -149,17 +155,32 @@ it("sends the desired settings on every turn and records exactly what was sent",
       (turn) =>
         JSON.parse(
           f.store.getCursor(`turn-execution/${turn.id}/submit`) ?? "{}",
-        ) as { model: string; effort: string },
+        ) as { model: string; effort: string; serviceTier: string },
     );
-  expect(executions.map((item) => [item.model, item.effort])).toEqual(
+  expect(
+    executions.map((item) => [item.model, item.effort, item.serviceTier]),
+  ).toEqual(
     expect.arrayContaining([
-      ["none", "none"],
-      ["beta", "low"],
+      ["none", "none", "none"],
+      ["beta", "low", "priority"],
     ]),
   );
   expect(f.store.getCursor("harness-settings/sent")).toBe(
-    JSON.stringify({ model: "beta", effort: "low" }),
+    JSON.stringify({ model: "beta", effort: "low", serviceTier: "priority" }),
   );
+});
+
+// Value: protects=a turn sent after /fast off records serviceTier standard and passes null to the adapter; fails_when=a null tier is recorded raw, as none or dropped; why_new=the null tier branch of recordExecution had no test; seam=none; no_claim=the /fast command flow (state is set directly)
+it("records the standard tier for a turn sent after fast mode is turned off", async () => {
+  const f = setup();
+  applySetting(f.context, audit, "harness", { serviceTier: null });
+  await f.engine.accept([message(1, "plain")], 2);
+  expect(f.submit.mock.calls[0]?.[0].settings).toEqual({ serviceTier: null });
+  const [turn] = f.store.listTurns(["active", "submitting", "completed"]);
+  const record = JSON.parse(
+    f.store.getCursor(`turn-execution/${turn?.id ?? ""}/submit`) ?? "{}",
+  ) as { serviceTier: string };
+  expect(record.serviceTier).toBe("standard");
 });
 
 it("records what a turn is sent with before its first status frame", async () => {

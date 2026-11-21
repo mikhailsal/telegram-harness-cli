@@ -16,6 +16,22 @@
 **Priority:** P2
 **Depends on:** a GitHub release for every version tag (the `gh release create` step in `docs/testing.md`)
 
+## Testing
+
+### The live self-check test times out on a loaded machine
+
+**What:** `tests/core/release-acceptance.test.ts` "checks live scenarios without modifying the isolated artifact" fails with `Test timed out in 60000ms` when the machine is busy.
+
+**Why:** the test copies `node_modules`, fingerprints the copy several times and runs a nested Vitest run, so its time grows with CPU load. Measured on 8 cores: 24 s idle, 53 s with 24 busy loops, and a timeout at 64 s with 40 busy loops. It failed once in `./quality check --all` during the /ship of `feat/settings-fast-status-doctor`, at a tree whose commit hook had passed it; that branch does not touch the test, `scripts/test-live.ts` or `tests/live/`.
+
+**Pros:** a red gate on a busy machine stops being noise. **Cons:** a longer timeout raises a test limit, which needs the owner's agreement; a cheaper test would have to keep the tamper check that the fingerprints provide.
+
+**Context:** the nested run already has its own 30 s cap (`spawnSync` in `scripts/test-live.ts`), so the 60 s test timeout mostly bounds the copying and hashing. Options: raise the timeout with these measurements, or fingerprint the copy fewer times.
+
+**Effort:** human S / CC S
+**Priority:** P1
+**Depends on:** the owner's decision on raising the timeout
+
 ## Completed
 
 ### Show model and effort in the live status draft

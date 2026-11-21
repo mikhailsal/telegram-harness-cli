@@ -232,6 +232,7 @@ it("reports a failed repair read and an empty list without changing anything", a
   );
 });
 
+// Value: protects=/status Next turns names the tier as fast mode (id) when on and fast mode off when null; fails_when=the tier part is dropped or swapped between on and off; why_new=no assertion read the tier in the status line; seam=none; no_claim=Telegram rendering (fake channel)
 it("shows what runs now, what Telegram sets next and why they differ", async () => {
   const f = settingsFixture();
   await run(f, command("status"));
@@ -264,4 +265,17 @@ it("shows what runs now, what Telegram sets next and why they differ", async () 
   const tmux = settingsFixture({ configure: false });
   await run(tmux, command("status"));
   expect(tmux.texts()[0]).not.toContain("Running");
+  for (const [update, tier, shown] of [
+    [20, "priority", "beta · fast mode (priority)"],
+    [21, null, "beta · fast mode off"],
+  ] as const) {
+    applySetting(
+      f.ctx,
+      { updateId: update, chatId: "1", userId: "1", sentAt: "" },
+      "harness",
+      { model: "beta", serviceTier: tier },
+    );
+    await run(f, command("status", "", update + 100));
+    expect(f.texts().at(-1)).toContain(shown);
+  }
 });
