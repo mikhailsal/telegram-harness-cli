@@ -33,9 +33,10 @@ commit, never the working tree, to a new or empty directory:
   with the core it ships;
 - every file in `[template].fenced` loses its maintainer-only regions. A
   region starts at a line containing `maintainer-only:begin` and ends at a
-  line containing `maintainer-only:end`, both removed with it; in TOML they
-  are comments and in Markdown HTML comments. A blank line that would double
-  the one before a region is dropped too;
+  line containing `maintainer-only:end`. Both marker lines are removed.
+  They are comments in TOML, shell scripts, and Markdown. The GitHub workflow's
+  fence keeps PCOV for the maintainer acceptance suite. A blank line
+  that would double the one before a region is dropped too;
 - the source policy must validate, and the export stops with
   `template.invalid` on a fence that does not open and close, a nested
   fence, a fenced file without a fence or not exported, a non-UTF-8 fenced
@@ -61,9 +62,8 @@ installed. The trailer is the provenance that later updates diff against
 
 The launcher prepares uv, CPython, and the core environment for
 `template export` as it does for `bootstrap`, because a fresh clone of the
-template has none of them yet
-([decision 0010](0010-launcher-bootstrap-and-hooks.md)). Every other command
-still runs offline.
+template has none of them yet. The launcher prepares the core offline for
+other commands ([decision 0010](0010-launcher-bootstrap-and-hooks.md)).
 
 ## Adding a component
 

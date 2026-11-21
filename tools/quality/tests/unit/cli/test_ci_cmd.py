@@ -4,11 +4,15 @@ from typing import Any
 
 import pytest
 
+from quality.cli import ci_cmd
 from quality.cli.main import main
 from quality.testkit.gitrepo import GitRepo
-from quality.testkit.policies import policy_toml
+from quality.testkit.policies import ComponentSpec, browser_spec, policy_toml
 
 CI = '[ci]\nworkflow = ".github/workflows/quality.yml"\nrequired_jobs = ["gate", "audit"]\n'
+NODE = ComponentSpec(id="node", root="node", profile="typescript")
+PHP = ComponentSpec(id="site", root="site", profile="php")
+HELPER = ComponentSpec(id="php-helper", root="helper", profile="php", role="helper")
 
 
 @pytest.fixture
@@ -114,3 +118,57 @@ def test_an_unknown_revision_is_reported(
 ) -> None:
     code, report = verdict(capsys, "--needs", str(needs(tmp_path)), "--rev", "missing")
     assert (code, rules(report)) == (3, ["git.revision-unresolvable"])
+
+
+@pytest.mark.parametrize(
+    ("case", "profiles"),
+    [
+        ("typescript", "typescript\n"),
+        ("php", "php\ntypescript\n"),
+        ("helper change", "php\ntypescript\n"),
+        ("browser lane", "typescript\n"),
+        ("maintainer", "php\ntypescript\n"),
+    ],
+)
+def test_profiles_use_the_gate_candidate_and_lane(
+    project: GitRepo, capsys: pytest.CaptureFixture[str], case: str, profiles: str
+) -> None:
+    components = (
+        (NODE, browser_spec(), HELPER, PHP)
+        if case in {"php", "browser lane"}
+        else (NODE, browser_spec(), HELPER)
+    )
+    mode = "maintainer" if case == "maintainer" else "project"
+    project.write("quality.toml", policy_toml(*components, mode=mode, extra=CI))
+    project.write("helper/src/entry.php", "<?php\n")
+    base = project.commit_all("exported project")
+    path = "helper/src/entry.php" if case == "helper change" else "node/src/index.ts"
+    project.write(path, "/* A candidate change */\n")
+    project.commit_all("candidate change")
+    args = ["ci", "prepare", "--stage", "merge", "--base", base, "--head", "HEAD", "--profiles"]
+    if case == "browser lane":
+        args += ["--lane", "browser"]
+    assert main(args) == 0
+    assert capsys.readouterr().out == profiles
+
+
+def test_a_bad_prepare_range_fails_without_a_profile_list(
+    project: GitRepo, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["ci", "prepare", "--stage", "merge", "--head", "HEAD", "--profiles"]) == 2
+    out, err = capsys.readouterr()
+    assert out == ""
+    assert "gate.arguments" in err
+
+
+def test_prepare_provisions_the_selected_lane(
+    project: GitRepo, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    project.write("quality.toml", policy_toml(NODE, browser_spec(), PHP, extra=CI))
+    project.commit_all("project")
+    monkeypatch.setattr(ci_cmd, "local_setups", dict)
+    assert main(["ci", "prepare", "--stage", "commit", "--lane", "browser"]) == 3
+    out = capsys.readouterr().out
+    assert "'web' uses the typescript profile" in out
+    assert "'node'" not in out
+    assert "'site'" not in out

@@ -1,6 +1,7 @@
 """The CI wrappers of this repository: thin translators that leave every decision to the CLI."""
 
 import json
+import os
 import re
 from collections.abc import Mapping
 from pathlib import Path
@@ -14,6 +15,8 @@ from quality.ci.aggregate import check_required
 from quality.ci.gitlab import check_gitlab_lanes
 from quality.ci.workflow import check_workflow, jobs, mapping, steps
 from quality.policy import load_policy
+from quality.process import Command, run
+from quality.template.fences import strip_fences
 
 TEMPLATE = Path(__file__).resolve().parents[4]
 GITHUB = ".github/workflows/quality.yml"
@@ -67,6 +70,51 @@ def test_the_github_workflow_meets_the_trust_rules_and_the_ci_policy() -> None:
     document = load(GITHUB)
     assert list(check_workflow(GITHUB, document)) == []
     assert list(check_required(document, policy.policy.ci)) == []
+
+
+@pytest.mark.parametrize(
+    ("profiles", "needs_php"), [("typescript", False), ("php\ntypescript", True)]
+)
+def test_exported_github_job_installs_php_only_for_an_active_profile(
+    tmp_path: Path, profiles: str, *, needs_php: bool
+) -> None:
+    loaded = load_policy(TEMPLATE).policy
+    assert loaded is not None
+    source = (TEMPLATE / GITHUB).read_text(encoding="utf-8")
+    if loaded.repository.mode == "maintainer":
+        assert loaded.template is not None and GITHUB in loaded.template.fenced
+        source = strip_fences(source)
+    workflow = cast(Mapping[str, object], yaml.safe_load(source))
+    shell = [
+        str(step["run"])
+        for step in steps(jobs(workflow)["gate"])
+        if "./quality gate" in str(step.get("run"))
+    ]
+    assert len(shell) == 1
+    quality = tmp_path / "quality"
+    quality.write_text(
+        '#!/bin/sh\ncase "$*" in\n'
+        '  *--profiles) printf "%s\\n" "$PROFILES" ;;\n'
+        '  *) printf "%s\\n" "$*" ;;\nesac\n',
+        encoding="utf-8",
+    )
+    quality.chmod(0o755)
+    env = {
+        **os.environ,
+        "EVENT": "push",
+        "TESTED": "commit",
+        "PUSH_BEFORE": "parent",
+        "BASELINE": str(tmp_path / "absent.json"),
+        "PROFILES": profiles,
+    }
+    script = 'sudo() { printf "sudo %s\\n" "$*"; }\n' + shell[0]
+    result = run(Command(("bash", "-ec", script), cwd=tmp_path, env=env, timeout=10))
+    output = result.stdout_text()
+    assert result.returncode == 0, result.stderr_text()
+    assert ("ppa:ondrej/php" in output) is needs_php
+    assert "php8.4-pcov" not in output
+    assert "ci prepare --stage commit --base parent --head commit" in output
+    assert "gate --stage commit --base parent --head commit --lane main" in output
 
 
 @pytest.mark.parametrize("path", [GITHUB, GITLAB])

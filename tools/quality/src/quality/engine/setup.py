@@ -15,14 +15,15 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from quality.ci import Lane, in_lane
 from quality.diagnostics import Diagnostic, Severity
 from quality.discovery import active_components
 from quality.engine.common import tool_findings
 from quality.engine.profiles import ProfileSetup
 from quality.engine.scope import changed_paths, checked_policy, unavailable
-from quality.gitio import GitioError, Repository, materialize, staged, tree_changes
+from quality.gitio import Candidate, GitioError, Repository, materialize, staged, tree_changes
 from quality.hooks import HookConflictError, HookName, inspect, install, status_diagnostics
-from quality.policy import Component, Profile
+from quality.policy import Component, Policy, Profile
 
 type Step = Callable[[ProfileSetup, Component, Path], list[Diagnostic]]
 
@@ -48,9 +49,37 @@ def _probe(setup: ProfileSetup, component: Component, root: Path) -> list[Diagno
     return setup.probe(component, root)
 
 
+@dataclass(frozen=True, slots=True)
+class SetupTarget:
+    """An exact candidate and the optional gate lane to provision."""
+
+    repo: Repository
+    candidate: Candidate
+    lane: Lane | None = None
+
+    def components(self, policy: Policy) -> tuple[Component, ...]:
+        """Select active components of the requested lane from the candidate's whole diff."""
+        changes = tree_changes(self.repo, self.candidate.base_tree, self.candidate.tree)
+        active = active_components(policy, changed_paths(changes))
+        return tuple(component for component in active if in_lane(component, self.lane))
+
+    def profiles(self, rules: Iterable[str]) -> SetupReport:
+        """List the profile names before any profile tools need to be present."""
+        try:
+            with materialize(self.repo, self.candidate.tree) as snapshot:
+                policy = checked_policy(snapshot.root, rules)
+                if isinstance(policy, tuple):
+                    return SetupReport(list(policy))
+                lines = sorted({str(component.profile) for component in self.components(policy)})
+            self.candidate.verify_unchanged()
+        except GitioError as error:
+            return SetupReport([error.diagnostic])
+        return SetupReport(lines=lines)
+
+
 def _components(
     root: Path,
-    changed: tuple[str, ...],
+    target: SetupTarget,
     setups: Mapping[Profile, ProfileSetup],
     rules: Iterable[str],
     step: Step,
@@ -60,8 +89,10 @@ def _components(
     if isinstance(policy, tuple):
         report.diagnostics.extend(policy)
         return report
-    active = {component.id for component in active_components(policy, changed)}
+    active = {component.id for component in target.components(policy)}
     for component in policy.components:
+        if not in_lane(component, target.lane):
+            continue
         if component.id not in active:
             report.lines.append(f"{component.id}: dormant, so its {component.profile} tools wait")
             continue
@@ -93,9 +124,7 @@ def each_component(
     repo = target.repo
     try:
         candidate = staged(repo, target.index)
-        changed = tuple(changed_paths(tree_changes(repo, candidate.base_tree, candidate.tree)))
-        with materialize(repo, candidate.tree) as snapshot:
-            return _components(snapshot.root, changed, setups, rules, step)
+        return _setup_candidate(SetupTarget(repo, candidate), setups, rules, step)
     except GitioError as error:
         return SetupReport([error.diagnostic])
 
@@ -105,6 +134,30 @@ def provision_components(
 ) -> SetupReport:
     """Download the interpreters and locked packages every component needs."""
     return each_component(target, setups, rules, _provision)
+
+
+def _setup_candidate(
+    target: SetupTarget,
+    setups: Mapping[Profile, ProfileSetup],
+    rules: Iterable[str],
+    step: Step,
+) -> SetupReport:
+    with materialize(target.repo, target.candidate.tree) as snapshot:
+        return _components(snapshot.root, target, setups, rules, step)
+
+
+def provision_candidate(
+    target: SetupTarget,
+    setups: Mapping[Profile, ProfileSetup],
+    rules: Iterable[str],
+) -> SetupReport:
+    """Provision a gate candidate from its actual tree and base."""
+    try:
+        report = _setup_candidate(target, setups, rules, _provision)
+        target.candidate.verify_unchanged()
+    except GitioError as error:
+        return SetupReport([error.diagnostic])
+    return report
 
 
 def probe_components(
