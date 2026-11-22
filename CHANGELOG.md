@@ -3,7 +3,7 @@
 All notable changes to `thc` are listed here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.2.0] - 2026-11-22
 
 ### Added
 

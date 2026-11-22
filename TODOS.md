@@ -32,7 +32,7 @@
 **Priority:** P1
 **Depends on:** the owner's decision on raising the timeout
 
-**Completed:** unreleased (2026-11-22). The test copies only the installed packages the self-check loads (the runtime dependencies and Vitest with their own, each found from the installed `package.json` files as Node finds it) and none of this checkout's run caches. It no longer repeats the two fingerprints `checkedScenario` already makes, and the owner agreed to a 90 s timeout. On 8 cores it took 13.7 s idle and timed out at 97 s with 48 busy loops; across repeated runs it takes about 7 s idle, 39 to 56 s with 48 busy loops and 55 to 76 s with 64.
+**Completed:** v0.2.0 (2026-11-22). The test copies only the installed packages the self-check loads (the runtime dependencies and Vitest with their own, each found from the installed `package.json` files as Node finds it) and none of this checkout's run caches. It no longer repeats the two fingerprints `checkedScenario` already makes, and the owner agreed to a 90 s timeout. On 8 cores it took 13.7 s idle and timed out at 97 s with 48 busy loops; across repeated runs it takes about 7 s idle, 39 to 56 s with 48 busy loops and 55 to 76 s with 64.
 
 ### Test waits end early when the system clock steps
 
@@ -123,7 +123,7 @@
 **Priority:** P3
 **Depends on:** None (the model/effort commands shipped in 0.1.0)
 
-**Completed:** unreleased (2026-11-21). The first status line of a Telegram turn names the model, effort and fast tier from its `turn-execution/<turn>/submit` record (`src/core/status-settings.ts`), which submitTurn now writes before the first status frame. A turn sent without an override names none.
+**Completed:** v0.2.0 (2026-11-21). The first status line of a Telegram turn names the model, effort and fast tier from its `turn-execution/<turn>/submit` record (`src/core/status-settings.ts`), which submitTurn now writes before the first status frame. A turn sent without an override names none.
 
 ### Service tier (`/fast`) toggle
 
@@ -139,7 +139,7 @@
 **Priority:** P3
 **Depends on:** None (the model/effort commands shipped in 0.1.0)
 
-**Completed:** unreleased (2026-11-21). `/fast` toggles and `/fast on|off` sets the tier (`src/core/harness-settings-tier.ts`). On sends the current model's tier that Codex names Fast, off sends `serviceTier: null`, which a live probe of codex-cli 0.169.0 showed returns the thread to the standard tier even over a `service_tier` in its config. The tier is stored in `harness-settings/desired` and model changes keep it.
+**Completed:** v0.2.0 (2026-11-21). `/fast` toggles and `/fast on|off` sets the tier (`src/core/harness-settings-tier.ts`). On sends the current model's tier that Codex names Fast, off sends `serviceTier: null`, which a live probe of codex-cli 0.169.0 showed returns the thread to the standard tier even over a `service_tier` in its config. The tier is stored in `harness-settings/desired` and model changes keep it.
 
 ### thc doctor: report whether model switching is supported
 
@@ -155,7 +155,7 @@
 **Priority:** P3
 **Depends on:** None (the model/effort commands shipped in 0.1.0)
 
-**Completed:** unreleased (2026-11-21). `thc doctor` reports `version.modelList` (`src/cli/doctor-codex.ts`): `supported`, `unsupported` for a Codex without `model/list`, or `unavailable` when the Codex daemon is not running. It never starts the daemon.
+**Completed:** v0.2.0 (2026-11-21). `thc doctor` reports `version.modelList` (`src/cli/doctor-codex.ts`): `supported`, `unsupported` for a Codex without `model/list`, or `unavailable` when the Codex daemon is not running. It never starts the daemon.
 
 ### A second `thc stop` kills the bridge mid-shutdown
 
