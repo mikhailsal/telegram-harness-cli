@@ -39,3 +39,13 @@ For local ShellCheck coverage, install the companion hook after bootstrap:
 `printf '#!/bin/sh\nset -eu\nexec python3 tools/quality/launcher/scripts/shellcheck-revision.py --pre-push\n' > .git/hooks/pre-push.local && chmod +x .git/hooks/pre-push.local`.
 The CI gate checks tracked `.sh` files in the tested revision with the same
 script; install ShellCheck locally before pushing shell changes.
+
+## Releases
+
+Versions and releases follow [docs/releasing.md](docs/releasing.md). A feature
+or fix pull request never changes the version; it adds a CHANGELOG entry under
+`## [Unreleased]` when users notice the change. The next version follows from
+that section (before 1.0.0, an Added, Removed or Breaking entry raises MINOR,
+anything else PATCH), so never ask for it. Only a `release/X.Y.Z` pull request
+changes the version, and a tag needs a clean `npm run test:live` on the merged
+commit and the owner's word on the manual Telegram checklist.

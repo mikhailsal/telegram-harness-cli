@@ -70,6 +70,9 @@ Before tagging, use a separate test bot in a Telegram client for this manual che
   one quote, with no empty quote bars between lines.
 - Restart the bridge during a turn and check the resulting answer and history.
 
+The order of the release steps, who runs each one and how the version is
+chosen are in [Releasing and versioning](releasing.md).
+
 Run `node scripts/release.ts` only after acceptance and the manual check. It
 requires a clean tree and a passing clean-run record for the exact commit, tree,
 worktree fingerprint and version from the preceding 24 hours. It repeats the

@@ -67,5 +67,6 @@
 - [CLI guide](cli.md)
 - [Testing guide](testing.md)
 - [Release checklist](release-checklist.md)
+- [Releasing and versioning](releasing.md)
 
 - [Telegram history skill](../skills/telegram-history/SKILL.md)
