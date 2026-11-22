@@ -104,6 +104,15 @@ def test_pre_push_is_optional_and_running_again_is_safe(
     assert [inspect(repository, name).status for name in HookName] == [HookStatus.CURRENT] * 2
 
 
+def test_core_only_leaves_components_and_hooks_alone(
+    project: GitRepo, setup: ScriptedSetup, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["bootstrap", "--core-only"]) == 0
+    assert capsys.readouterr().out == f"{tool_line(tmp_path)}PASSED: 0 error(s), 0 warning(s)\n"
+    assert setup.calls == []
+    assert all(not hook(project, name).exists() for name in HookName)
+
+
 def test_a_foreign_hook_is_reported_and_left_unchanged(
     project: GitRepo, capsys: pytest.CaptureFixture[str]
 ) -> None:

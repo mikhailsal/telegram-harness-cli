@@ -42,8 +42,14 @@ def register(commands: Subcommands) -> None:
         "unchanged. Running it again is safe. Exit 0 when everything is ready, 2 on policy "
         "errors, 3 on download, installation, or hook conflicts.",
     )
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--pre-push", action="store_true", help="also install the managed pre-push hook"
+    )
+    mode.add_argument(
+        "--core-only",
+        action="store_true",
+        help="install the core and standalone tools without component environments or hooks",
     )
     parser.set_defaults(handler=run_bootstrap)
 
@@ -92,7 +98,7 @@ def bootstrap(*, pre_push: bool) -> SetupReport:
 
 def run_bootstrap(args: argparse.Namespace) -> int:
     """Prepare this working tree for offline checks."""
-    report = bootstrap(pre_push=args.pre_push)
+    report = install_tools(TOOLS) if args.core_only else bootstrap(pre_push=args.pre_push)
     outcome = Outcome.of(report.diagnostics)
     sys.stdout.write("".join(f"{line}\n" for line in report.lines) + render_text(outcome))
     return int(outcome.exit_code())

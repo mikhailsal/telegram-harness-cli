@@ -25,9 +25,6 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      # No PHP runtime: this repository has no PHP application, so the PHP profile
-      # is inactive unless a candidate changes tools/quality/helpers/php (decision
-      # 0016), and the gate then fails because PHP is missing (#14).
       - name: Install ShellCheck
         run: |
           if ! command -v shellcheck >/dev/null; then
@@ -51,8 +48,8 @@ jobs:
           path: ${{ runner.temp }}/baseline
           key: quality-baseline-${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           restore-keys: quality-baseline-
-      - name: Install the pinned tools and packages
-        run: ./quality bootstrap
+      - name: Install the pinned core and standalone tools
+        run: ./quality bootstrap --core-only
       - name: Check shell scripts in the tested revision
         run: python3 tools/quality/launcher/scripts/shellcheck-revision.py "$GITHUB_SHA"
       - name: Run the main lane of the gate over the revisions of the event
@@ -78,6 +75,18 @@ jobs:
               echo "unsupported event: $EVENT" >&2
               exit 2 ;;
           esac
+          profiles="$(./quality ci prepare "$@" --profiles)"
+          if [[ $'\n'"$profiles"$'\n' == *$'\nphp\n'* ]]; then
+            pcov=""
+            sudo add-apt-repository --yes ppa:ondrej/php
+            sudo apt-get update
+            sudo apt-get install --yes php8.4-cli php8.4-xml php8.4-mbstring php8.4-zip \
+              php8.4-xdebug ${pcov:+"php8.4-$pcov"}
+            sudo phpdismod -v 8.4 -s ALL xdebug ${pcov:+"$pcov"}
+            sudo update-alternatives --set php /usr/bin/php8.4
+          fi
+          # The maintainer acceptance suite also exercises exported browser projects.
+          ./quality ci prepare "$@"
           if [ -f "$BASELINE" ]; then
             set -- "$@" --baseline "$BASELINE"
           fi
@@ -133,8 +142,8 @@ jobs:
           path: ${{ runner.temp }}/baseline
           key: quality-browser-baseline-${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           restore-keys: quality-browser-baseline-
-      - name: Install the pinned tools and packages
-        run: ./quality bootstrap
+      - name: Install the pinned core and standalone tools
+        run: ./quality bootstrap --core-only
       - name: Run the browser lane of the gate over the revisions of the event
         env:
           EVENT: ${{ github.event_name }}
@@ -158,6 +167,7 @@ jobs:
               echo "unsupported event: $EVENT" >&2
               exit 2 ;;
           esac
+          ./quality ci prepare "$@" --lane browser
           if [ -f "$BASELINE" ]; then
             set -- "$@" --baseline "$BASELINE"
           fi
@@ -192,8 +202,8 @@ jobs:
           path: ~/.cache/quality
           key: quality-cache-${{ hashFiles('tools/quality/toolchains.toml', '**/*.lock', '**/package-lock.json') }}
           restore-keys: quality-cache-
-      - name: Install the pinned tools and packages
-        run: ./quality bootstrap
+      - name: Install the pinned core and standalone tools
+        run: ./quality bootstrap --core-only
       - name: Match the lockfiles against current advisories
         run: ./quality audit --rev HEAD
 
@@ -215,8 +225,8 @@ jobs:
           path: ~/.cache/quality
           key: quality-cache-${{ hashFiles('tools/quality/toolchains.toml', '**/*.lock', '**/package-lock.json') }}
           restore-keys: quality-cache-
-      - name: Install the pinned tools and packages
-        run: ./quality bootstrap
+      - name: Install the pinned core and standalone tools
+        run: ./quality bootstrap --core-only
       - name: Decide from the results of every required job
         env:
           NEEDS: ${{ toJSON(needs) }}

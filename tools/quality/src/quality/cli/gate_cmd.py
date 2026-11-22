@@ -45,6 +45,15 @@ def register(commands: Subcommands) -> None:
         "LCOV, Cobertura, and native reports into a new or empty directory. Exit 0 on pass, "
         "1 on violations, 2 on usage or policy errors, 3 on environment errors.",
     )
+    candidate_arguments(parser)
+    parser.add_argument("--reports", type=Path, help="new or empty directory for the reports")
+    parser.add_argument("--baseline", type=Path, help="earlier report.json to report regressions")
+    parser.add_argument("--json", action="store_true", help="print a JSON report")
+    parser.set_defaults(handler=run_gate, judged=True, select=select)
+
+
+def candidate_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add the candidate and lane arguments shared by gate and CI preparation."""
     parser.add_argument(
         "--stage", choices=[str(stage) for stage in Stage], required=True, help="gate stage"
     )
@@ -58,10 +67,6 @@ def register(commands: Subcommands) -> None:
     parser.add_argument(
         "--lane", choices=[str(lane) for lane in Lane], help="check one lane, as a CI job does"
     )
-    parser.add_argument("--reports", type=Path, help="new or empty directory for the reports")
-    parser.add_argument("--baseline", type=Path, help="earlier report.json to report regressions")
-    parser.add_argument("--json", action="store_true", help="print a JSON report")
-    parser.set_defaults(handler=run_gate, judged=True, select=select)
 
 
 def revisions_of(args: argparse.Namespace) -> Revisions:

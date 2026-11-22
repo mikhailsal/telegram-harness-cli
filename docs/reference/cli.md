@@ -24,7 +24,7 @@ environment fails with `core.environment`.
 
 | Command | Purpose |
 | --- | --- |
-| `bootstrap [--pre-push]` | Install the pinned tools, interpreters, and locked packages, then the managed hooks ([decision 0010](../decisions/0010-launcher-bootstrap-and-hooks.md)) |
+| `bootstrap [--pre-push \| --core-only]` | Install the pinned tools, interpreters, and locked packages, then the managed hooks. `--core-only` installs just the core and the standalone tools ([decision 0010](../decisions/0010-launcher-bootstrap-and-hooks.md)) |
 | `doctor [--json]` | Verify offline and read-only that checks can run here |
 | `tools install [NAME ...]` | Download, verify, and install pinned tools from `tools/quality/toolchains.toml`: gitleaks, actionlint, and osv-scanner by default, or the named ones such as `node`, `dart`, `composer`, or `chromium`; bootstrap installs Node only for a TypeScript component, Chromium only for a browser component, the Dart SDK only for a Dart component, and Composer only for a PHP component |
 | `tools update NAME VERSION` | Rewrite one tool's pins in `toolchains.toml` for another release, with checksums from the vendor's checksum file that its `checksums` template names; nothing is installed or staged ([maintenance guide](../guides/maintenance.md)) |
@@ -58,6 +58,7 @@ commands read no provider variables
 | --- | --- |
 | `gate --stage commit\|merge [--base REV --head REV] [--tested REV \| --queue] [--lane main\|browser] [--index FILE] [--reports DIR] [--baseline FILE] [--json]` | Every gate over every active component of one candidate: the index, a pushed range, a pull request's tested merge, or a merge-queue entry; a range also checks every blob of its new commits. `--lane browser` checks only the browser components and `--lane main` everything else, so two CI jobs together run the whole gate. `--reports` writes `report.json`, JUnit, LCOV, Cobertura, and the native reports; `--baseline` reports coverage regressions against an earlier `report.json` as warnings |
 | `audit [--rev REV] [--offline-db DIR] [--json]` | Match every lockfile against the OSV advisories with the pinned osv-scanner, from the osv.dev API or an offline database; `[audit]` in the policy sets the blocking CVSS score |
+| `ci prepare` with the candidate and lane arguments of `gate`, and optional `--profiles` | Provision the candidate's active component environments after `bootstrap --core-only`. With `--profiles`, print the active profile names, one per line, for the wrapper to install host prerequisites before provisioning |
 | `ci verdict --needs FILE [--rev REV] [--json]` | The aggregate job's decision: fail unless every job in `[ci].required_jobs` succeeded, from results in the form of GitHub's `toJSON(needs)` |
 
 ## Inspection and policy
