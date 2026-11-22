@@ -26,11 +26,70 @@
 
 **Pros:** a red gate on a busy machine stops being noise. **Cons:** a longer timeout raises a test limit, which needs the owner's agreement; a cheaper test would have to keep the tamper check that the fingerprints provide.
 
-**Context:** the nested run already has its own 30 s cap (`spawnSync` in `scripts/test-live.ts`), so the 60 s test timeout mostly bounds the copying and hashing. Options: raise the timeout with these measurements, or fingerprint the copy fewer times.
+**Context:** the nested run already has its own 30 s cap (`spawnSync` in `scripts/test-live.ts`), so the 60 s test timeout mostly bounds the copying and hashing. Options: raise the timeout with these measurements, or fingerprint the copy fewer times. The test needs no Codex login or network and already runs in the CI `gate` job, where it passes; it has failed only in local hooks on a busy machine. Moving it to CI only would break the rule that the hooks and CI run the same checks.
 
 **Effort:** human S / CC S
 **Priority:** P1
 **Depends on:** the owner's decision on raising the timeout
+
+## Settings commands
+
+### The model-rejected hold: `/effort` releases it and the recover button goes stale
+
+**What:** after Codex rejects the Telegram model, queued messages stay held until the model actually changes, and the notice's `Switch to <default>` button keeps working until then.
+
+**Why:** two paths break the hold today. `/effort` on a rejected model that `model/list` still lists commits the new effort with the same model (`effortCommand` in `src/core/harness-settings-command.ts`), which releases the hold, so the next queued message goes to the rejected model and fails again; this predates `/fast`. And `/fast` during the hold keeps the queue held but changes the desired-settings version, so the notice's button answers "Already resolved" (the `recover` handler in `src/core/harness-settings-cards.ts`) while the queue still waits; the owner has to type `/model`.
+
+**Context:** review notes of #31 (Codex adversarial and structured passes). `docs/cli.md` says a `/model` or `/effort` choice releases the hold; the fix should release it on `/effort` only when the model differs from the rejected one, and compare the button's version against the model alone. Start with a test that holds the queue through `modelNotFound`, then sends `/effort` and `/fast`.
+
+**Effort:** human S / CC S
+**Priority:** P2
+**Depends on:** None
+
+### `/fast` edge cases
+
+**What:** four small `/fast` behaviors found in the review of #31.
+
+**Why:**
+
+- `/fast on` falls back to the model's first tier when none is named Fast (`fastTier` in `src/core/harness-settings-tier.ts`), so a model that lists only a slower tier gets that one; the confirmation names it, but "fast" is then wrong.
+- A bare `/fast` while fast mode is on still reads `model/list` (`runSettingsCommand` in `src/core/harness-settings-command.ts` treats only `/fast off` as listless), so a catalog failure keeps fast mode on although turning it off only writes `null`.
+- `/model reset` after `/fast off` replies "Telegram override removed" but keeps the explicit standard-tier override (`resetModel`, same file); with fast mode on it cannot say whether the running model lists the tier.
+- The live status shows nothing for a turn sent with the explicit standard tier (`src/core/status-settings.ts`), so it looks like a turn sent without a tier override.
+
+**Context:** only the first sends Codex a request the owner did not mean, and only for a model whose tiers include none named Fast. Fix them together, each with a test in `tests/core/harness-settings-*.test.ts`.
+
+**Effort:** human S / CC S
+**Priority:** P3
+**Depends on:** None
+
+## Engine
+
+### A store error before submit leaves the turn submitting
+
+**What:** a failure to write the execution record or the sent-settings cursor turns the Telegram turn uncertain at once, like a failed submit.
+
+**Why:** `submitTurn` in `src/core/engine-submit.ts` writes `recordExecution`, the sent-settings cursor and the first `statuses.refresh()` after moving the turn to `submitting` but before the `try` around `adapter.submit`. A store error there leaves the turn `submitting`, and the queue waits until the next reconnect or restart turns it uncertain.
+
+**Context:** review note of #31 (Codex structured pass). The writes moved before the first status frame so the status can name the settings sent. Move the three calls inside the `try`, keeping their order before `adapter.submit`, and add a test with a store that throws on that cursor.
+
+**Effort:** human S / CC S
+**Priority:** P2
+**Depends on:** None
+
+## Doctor
+
+### `thc doctor` can wait 30 s for a daemon that stops answering
+
+**What:** the `model/list` check closes its socket at once when it ends.
+
+**Why:** `src/cli/doctor-codex.ts` removes the abort listener in `finally` and then calls the graceful `transport.close()`. A daemon that answers `model/list` and then ignores the close frame keeps `thc doctor` alive up to 30 s more, past its 5 s budget.
+
+**Context:** review note of #31 (Codex structured and adversarial passes). Call `transport.terminate()` in the `finally`; the hung-daemon test in `tests/cli/doctor-codex.test.ts` can cover the answered-then-silent case.
+
+**Effort:** human S / CC S
+**Priority:** P3
+**Depends on:** None
 
 ## Completed
 
