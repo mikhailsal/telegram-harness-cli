@@ -32,6 +32,8 @@
 **Priority:** P1
 **Depends on:** the owner's decision on raising the timeout
 
+**Completed:** unreleased (2026-11-22). The test copies only the installed packages the self-check loads (the runtime dependencies and Vitest with their own, read from `node_modules/.package-lock.json`) and none of this checkout's run caches. It no longer repeats the two fingerprints `checkedScenario` already makes, and the owner agreed to a 90 s timeout. On 8 cores it took 13.7 s idle and timed out at 97 s with 48 busy loops; now it takes 6.8 s idle, 39 s with 48 busy loops and 55 s with 64.
+
 ## Settings commands
 
 ### The model-rejected hold: `/effort` releases it and the recover button goes stale
@@ -67,11 +69,11 @@
 
 ### A store error before submit leaves the turn submitting
 
-**What:** a failure to write the execution record or the sent-settings cursor turns the Telegram turn uncertain at once, like a failed submit.
+**What:** a failure to write the adapter descriptor, the execution record or the sent-settings cursor turns the Telegram turn uncertain at once, like a failed submit.
 
-**Why:** `submitTurn` in `src/core/engine-submit.ts` writes `recordExecution`, the sent-settings cursor and the first `statuses.refresh()` after moving the turn to `submitting` but before the `try` around `adapter.submit`. A store error there leaves the turn `submitting`, and the queue waits until the next reconnect or restart turns it uncertain.
+**Why:** `submitTurn` in `src/core/engine-submit.ts` calls `ctx.persistAdapter()`, `recordExecution` with the sent-settings cursor and the first `statuses.refresh()` after moving the turn to `submitting` but before the `try` around `adapter.submit`. A store error there leaves the turn `submitting`, and the queue waits until the next reconnect or restart turns it uncertain.
 
-**Context:** review note of #31 (Codex structured pass). The writes moved before the first status frame so the status can name the settings sent. Move the three calls inside the `try`, keeping their order before `adapter.submit`, and add a test with a store that throws on that cursor.
+**Context:** review note of #31 (Codex structured pass). The writes moved before the first status frame so the status can name the settings sent. Move these calls inside the `try`, keeping their order before `adapter.submit`, and add tests with a store that throws on the `adapter-descriptor` cursor and on the sent-settings cursor. `persistAdapter` was found by the Codex review of #32.
 
 **Effort:** human S / CC S
 **Priority:** P2

@@ -1,4 +1,4 @@
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { expect, it, vi } from "vitest";
 import {
   liveOptions,
@@ -8,7 +8,6 @@ import {
   checkedScenario,
 } from "../../scripts/test-live.ts";
 import type { AcceptanceOperations } from "../../scripts/test-live.ts";
-import { artifactFingerprint } from "../../scripts/release.ts";
 
 const passing = {
   schema: 2,
@@ -205,19 +204,53 @@ async function initializeArtifact(root: string): Promise<void> {
   await writeFile(join(root, "package.json"), '{"type":"module"}');
   await writeFile(join(root, "npm-shrinkwrap.json"), "{}");
 }
+type LockedPackage = Partial<
+  Record<
+    "dependencies" | "optionalDependencies" | "peerDependencies",
+    Record<string, string>
+  >
+>;
+/**
+ * The installed packages a live self-check loads: the runtime dependencies and
+ * Vitest, with their own. Copying only these, and none of this checkout's run
+ * caches, keeps the test fast on a busy machine.
+ */
+async function selfCheckPackages(): Promise<string[]> {
+  const { readFile } = await import("node:fs/promises");
+  const manifest = JSON.parse(await readFile("package.json", "utf8")) as {
+    dependencies?: Record<string, string>;
+  };
+  const installed = JSON.parse(
+    await readFile("node_modules/.package-lock.json", "utf8"),
+  ) as { packages: Record<string, LockedPackage | undefined> };
+  const found = new Set<string>();
+  const pending = [...Object.keys(manifest.dependencies ?? {}), "vitest"];
+  for (let name = pending.pop(); name !== undefined; name = pending.pop()) {
+    const entry = installed.packages[`node_modules/${name}`];
+    if (found.has(name) || !entry) continue;
+    found.add(name);
+    for (const field of [
+      "dependencies",
+      "optionalDependencies",
+      "peerDependencies",
+    ] as const)
+      pending.push(...Object.keys(entry[field] ?? {}));
+  }
+  return [...found];
+}
 async function copyInstalledModules(root: string): Promise<void> {
-  const { cp, mkdir, readdir } = await import("node:fs/promises");
+  const { cp, mkdir } = await import("node:fs/promises");
   const { constants } = await import("node:fs");
   const source = resolve("node_modules");
   const destination = join(root, "node_modules");
-  await mkdir(destination);
   const results = await Promise.allSettled(
-    (await readdir(source)).map((name) =>
-      cp(join(source, name), join(destination, name), {
+    (await selfCheckPackages()).map(async (name) => {
+      await mkdir(dirname(join(destination, name)), { recursive: true });
+      await cp(join(source, name), join(destination, name), {
         recursive: true,
         mode: constants.COPYFILE_FICLONE,
-      }),
-    ),
+      });
+    }),
   );
   const failures = results.filter((result) => result.status === "rejected");
   if (failures.length)
@@ -234,21 +267,13 @@ it("checks live scenarios without modifying the isolated artifact", async () => 
     await initializeArtifact(root);
     await cp(resolve("src"), join(root, "src"), { recursive: true });
     await copyInstalledModules(root);
-    await rm(join(root, "node_modules/.vite-temp"), {
-      recursive: true,
-      force: true,
-    });
-    await rm(join(root, "node_modules/.vitest-cache"), {
-      recursive: true,
-      force: true,
-    });
-    const before = artifactFingerprint(root);
+    // checkedScenario fingerprints the artifact before and after its own run
+    // and throws if it changed; the next test proves that check.
     expect((await checkedScenario(root)).acceptance).toBeTypeOf("function");
-    expect(artifactFingerprint(root)).toBe(before);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
-}, 60_000);
+}, 90_000);
 
 it("rejects a self-check that mutates installed dependencies before loading the scenario", async () => {
   const { mkdir, mkdtemp, rm, writeFile } = await import("node:fs/promises");

@@ -35,7 +35,9 @@ artifact digests are checked again after the runs. Failed or partial records can
 workspace is removed after each run; the new Codex sessions follow the normal
 Codex retention policy.
 
-Before tagging, use a separate test bot in a Telegram client for this manual checklist:
+Before tagging, the owner goes through this manual checklist with a separate
+test bot in a Telegram client, or decides to release without it this time (see
+[Releasing and versioning](releasing.md)):
 
 - Verify rich text, long answers, code blocks and a large code attachment.
 - Verify the draft appears, its stop button works, and it restarts after a card.
