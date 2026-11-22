@@ -1,4 +1,5 @@
-import { join, resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { expect, it, vi } from "vitest";
 import {
   liveOptions,
@@ -8,7 +9,6 @@ import {
   checkedScenario,
 } from "../../scripts/test-live.ts";
 import type { AcceptanceOperations } from "../../scripts/test-live.ts";
-import { artifactFingerprint } from "../../scripts/release.ts";
 
 const passing = {
   schema: 2,
@@ -205,19 +205,70 @@ async function initializeArtifact(root: string): Promise<void> {
   await writeFile(join(root, "package.json"), '{"type":"module"}');
   await writeFile(join(root, "npm-shrinkwrap.json"), "{}");
 }
+type Manifest = Partial<
+  Record<
+    "dependencies" | "optionalDependencies" | "peerDependencies",
+    Record<string, string>
+  >
+>;
+const dependencyFields = [
+  "dependencies",
+  "optionalDependencies",
+  "peerDependencies",
+] as const;
+/**
+ * Where Node finds `name` from the package in `from`: in its own node_modules,
+ * then in each enclosing one.
+ */
+function installedPackage(from: string, name: string): string | undefined {
+  for (let dir = from; ; dir = dirname(dir)) {
+    const candidate = join(dir, "node_modules", name);
+    if (existsSync(join(candidate, "package.json"))) return candidate;
+    if (dir === ".") return undefined;
+  }
+}
+/**
+ * The top-level installed packages a live self-check loads: the runtime
+ * dependencies and Vitest, with their own, each found as Node finds it. A
+ * nested package travels with the top-level package that holds it. Copying
+ * only these, and none of this checkout's run caches, keeps the test fast on a
+ * busy machine; the reads are synchronous for the same reason.
+ */
+function selfCheckPackages(): string[] {
+  const manifest = (dir: string): Manifest =>
+    JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as Manifest;
+  const found = new Set<string>();
+  const pending = Object.keys(manifest(".").dependencies ?? {})
+    .concat("vitest")
+    .map((name) => installedPackage(".", name));
+  while (pending.length) {
+    const dir = pending.pop();
+    if (!dir || found.has(dir)) continue;
+    found.add(dir);
+    const own = manifest(dir);
+    for (const name of dependencyFields.flatMap((field) =>
+      Object.keys(own[field] ?? {}),
+    ))
+      pending.push(installedPackage(dir, name));
+  }
+  const topLevel = [...found].map((dir) =>
+    dir.replace(/^node_modules\/((?:@[^/]+\/)?[^/]+).*$/, "$1"),
+  );
+  return [...new Set(topLevel)];
+}
 async function copyInstalledModules(root: string): Promise<void> {
-  const { cp, mkdir, readdir } = await import("node:fs/promises");
+  const { cp, mkdir } = await import("node:fs/promises");
   const { constants } = await import("node:fs");
   const source = resolve("node_modules");
   const destination = join(root, "node_modules");
-  await mkdir(destination);
   const results = await Promise.allSettled(
-    (await readdir(source)).map((name) =>
-      cp(join(source, name), join(destination, name), {
+    selfCheckPackages().map(async (name) => {
+      await mkdir(dirname(join(destination, name)), { recursive: true });
+      await cp(join(source, name), join(destination, name), {
         recursive: true,
         mode: constants.COPYFILE_FICLONE,
-      }),
-    ),
+      });
+    }),
   );
   const failures = results.filter((result) => result.status === "rejected");
   if (failures.length)
@@ -234,21 +285,13 @@ it("checks live scenarios without modifying the isolated artifact", async () => 
     await initializeArtifact(root);
     await cp(resolve("src"), join(root, "src"), { recursive: true });
     await copyInstalledModules(root);
-    await rm(join(root, "node_modules/.vite-temp"), {
-      recursive: true,
-      force: true,
-    });
-    await rm(join(root, "node_modules/.vitest-cache"), {
-      recursive: true,
-      force: true,
-    });
-    const before = artifactFingerprint(root);
+    // checkedScenario fingerprints the artifact before and after its own run
+    // and throws if it changed; the next test proves that check.
     expect((await checkedScenario(root)).acceptance).toBeTypeOf("function");
-    expect(artifactFingerprint(root)).toBe(before);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
-}, 60_000);
+}, 90_000);
 
 it("rejects a self-check that mutates installed dependencies before loading the scenario", async () => {
   const { mkdir, mkdtemp, rm, writeFile } = await import("node:fs/promises");

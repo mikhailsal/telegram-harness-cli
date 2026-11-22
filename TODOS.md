@@ -32,6 +32,22 @@
 **Priority:** P1
 **Depends on:** the owner's decision on raising the timeout
 
+**Completed:** unreleased (2026-11-22). The test copies only the installed packages the self-check loads (the runtime dependencies and Vitest with their own, each found from the installed `package.json` files as Node finds it) and none of this checkout's run caches. It no longer repeats the two fingerprints `checkedScenario` already makes, and the owner agreed to a 90 s timeout. On 8 cores it took 13.7 s idle and timed out at 97 s with 48 busy loops; across repeated runs it takes about 7 s idle, 39 to 56 s with 48 busy loops and 55 to 76 s with 64.
+
+### Test waits end early when the system clock steps
+
+**What:** `waitFor` in `tests/core/runtime-fixture.ts` measures its deadline with `Date.now()`, so a step of the wall clock ends a wait at once.
+
+**Why:** on 2026-11-22 the owner's machine stepped its clock 7.9 s forward and back once a minute (the journal logs "Clock change detected"). Any `tests/core/runtime*.test.ts` waiting at that moment failed with "Timed out waiting for runtime condition" after about a second instead of five. 7 of 10 local gate runs failed that way during the /ship of `fix/release-acceptance-timeout`, each in another runtime test; CI was not affected.
+
+**Pros:** local hooks stop failing on a machine whose clock steps. **Cons:** none known; `performance.now()` is monotonic and needs no new dependency.
+
+**Context:** the same `Date.now()` deadline loop is in `tests/fakes/runtime-fixture.ts`, `tests/core/runtime-recovery.test.ts`, `tests/live/live-runtime.ts` and `tests/e2e/install-pty.test.ts`, and in `src/cli/attach.ts`, `src/cli/setup-lock.ts`, `src/adapters/codex-tmux/ui.ts` and the ack deadline in `src/adapters/codex-tmux/index.ts`, where an NTP step or a resumed machine could cut a real wait short. Start with `waitFor`, which every failure went through.
+
+**Effort:** human S / CC S
+**Priority:** P2
+**Depends on:** None
+
 ## Settings commands
 
 ### The model-rejected hold: `/effort` releases it and the recover button goes stale
@@ -67,11 +83,11 @@
 
 ### A store error before submit leaves the turn submitting
 
-**What:** a failure to write the execution record or the sent-settings cursor turns the Telegram turn uncertain at once, like a failed submit.
+**What:** a failure to write the adapter descriptor, the execution record or the sent-settings cursor turns the Telegram turn uncertain at once, like a failed submit.
 
-**Why:** `submitTurn` in `src/core/engine-submit.ts` writes `recordExecution`, the sent-settings cursor and the first `statuses.refresh()` after moving the turn to `submitting` but before the `try` around `adapter.submit`. A store error there leaves the turn `submitting`, and the queue waits until the next reconnect or restart turns it uncertain.
+**Why:** `submitTurn` in `src/core/engine-submit.ts` calls `ctx.persistAdapter()`, `recordExecution` with the sent-settings cursor and the first `statuses.refresh()` after moving the turn to `submitting` but before the `try` around `adapter.submit`. A store error there leaves the turn `submitting`, and the queue waits until the next reconnect or restart turns it uncertain.
 
-**Context:** review note of #31 (Codex structured pass). The writes moved before the first status frame so the status can name the settings sent. Move the three calls inside the `try`, keeping their order before `adapter.submit`, and add a test with a store that throws on that cursor.
+**Context:** review note of #31 (Codex structured pass). The writes moved before the first status frame so the status can name the settings sent. Move these calls inside the `try`, keeping their order before `adapter.submit`, and add tests with a store that throws on the `adapter-descriptor` cursor and on the sent-settings cursor. `persistAdapter` was found by the Codex review of #32.
 
 **Effort:** human S / CC S
 **Priority:** P2

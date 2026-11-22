@@ -36,11 +36,11 @@ package is private and is not published to npm.
 
 The `## [Unreleased]` section decides the level. Nobody is asked.
 
-| `## [Unreleased]` holds                         | Next version after `0.Y.Z` |
-| ----------------------------------------------- | -------------------------- |
-| a `**Breaking:**` entry or a `### Removed` list | `0.(Y+1).0`                |
-| an `### Added` list                             | `0.(Y+1).0`                |
-| only `### Changed`, `### Fixed`, `### Security` | `0.Y.(Z+1)`                |
+| `## [Unreleased]` holds                                      | Next version after `0.Y.Z` |
+| ------------------------------------------------------------ | -------------------------- |
+| a `**Breaking:**` entry in any list, or a `### Removed` list | `0.(Y+1).0`                |
+| an `### Added` list                                          | `0.(Y+1).0`                |
+| only `### Changed`, `### Fixed`, `### Security`              | `0.Y.(Z+1)`                |
 
 `1.0.0` comes only by the owner's decision, once the configuration and state
 formats are meant to stay. From then on a breaking change raises MAJOR, an
@@ -55,7 +55,8 @@ release brings new commands or only fixes.
 
 - **Fix release, the same day:** a merged fix for a bug in the latest tagged
   release that stops the bridge, loses or misroutes messages, or exposes a
-  token or another secret.
+  token or another secret. It still takes every release step below, including
+  the owner's word on the checklist.
 - **Otherwise on the owner's request.** After each merge, the agent's report
   states how many entries `## [Unreleased]` holds and the version they would
   make.
