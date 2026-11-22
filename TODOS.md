@@ -34,6 +34,20 @@
 
 **Completed:** unreleased (2026-11-22). The test copies only the installed packages the self-check loads (the runtime dependencies and Vitest with their own, each found from the installed `package.json` files as Node finds it) and none of this checkout's run caches. It no longer repeats the two fingerprints `checkedScenario` already makes, and the owner agreed to a 90 s timeout. On 8 cores it took 13.7 s idle and timed out at 97 s with 48 busy loops; across repeated runs it takes about 7 s idle, 39 to 56 s with 48 busy loops and 55 to 76 s with 64.
 
+### Test waits end early when the system clock steps
+
+**What:** `waitFor` in `tests/core/runtime-fixture.ts` measures its deadline with `Date.now()`, so a step of the wall clock ends a wait at once.
+
+**Why:** on 2026-11-22 the owner's machine stepped its clock 7.9 s forward and back once a minute (the journal logs "Clock change detected"). Any `tests/core/runtime*.test.ts` waiting at that moment failed with "Timed out waiting for runtime condition" after about a second instead of five. 7 of 10 local gate runs failed that way during the /ship of `fix/release-acceptance-timeout`, each in another runtime test; CI was not affected.
+
+**Pros:** local hooks stop failing on a machine whose clock steps. **Cons:** none known; `performance.now()` is monotonic and needs no new dependency.
+
+**Context:** the same `Date.now()` deadline loop is in `tests/fakes/runtime-fixture.ts`, `tests/core/runtime-recovery.test.ts`, `tests/live/live-runtime.ts` and `tests/e2e/install-pty.test.ts`, and in `src/cli/attach.ts`, `src/cli/setup-lock.ts`, `src/adapters/codex-tmux/ui.ts` and the ack deadline in `src/adapters/codex-tmux/index.ts`, where an NTP step or a resumed machine could cut a real wait short. Start with `waitFor`, which every failure went through.
+
+**Effort:** human S / CC S
+**Priority:** P2
+**Depends on:** None
+
 ## Settings commands
 
 ### The model-rejected hold: `/effort` releases it and the recover button goes stale
