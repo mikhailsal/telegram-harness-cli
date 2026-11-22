@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { expect, it, vi } from "vitest";
 import {
@@ -204,39 +205,56 @@ async function initializeArtifact(root: string): Promise<void> {
   await writeFile(join(root, "package.json"), '{"type":"module"}');
   await writeFile(join(root, "npm-shrinkwrap.json"), "{}");
 }
-type LockedPackage = Partial<
+type Manifest = Partial<
   Record<
     "dependencies" | "optionalDependencies" | "peerDependencies",
     Record<string, string>
   >
 >;
+const dependencyFields = [
+  "dependencies",
+  "optionalDependencies",
+  "peerDependencies",
+] as const;
 /**
- * The installed packages a live self-check loads: the runtime dependencies and
- * Vitest, with their own. Copying only these, and none of this checkout's run
- * caches, keeps the test fast on a busy machine.
+ * Where Node finds `name` from the package in `from`: in its own node_modules,
+ * then in each enclosing one.
  */
-async function selfCheckPackages(): Promise<string[]> {
-  const { readFile } = await import("node:fs/promises");
-  const manifest = JSON.parse(await readFile("package.json", "utf8")) as {
-    dependencies?: Record<string, string>;
-  };
-  const installed = JSON.parse(
-    await readFile("node_modules/.package-lock.json", "utf8"),
-  ) as { packages: Record<string, LockedPackage | undefined> };
-  const found = new Set<string>();
-  const pending = [...Object.keys(manifest.dependencies ?? {}), "vitest"];
-  for (let name = pending.pop(); name !== undefined; name = pending.pop()) {
-    const entry = installed.packages[`node_modules/${name}`];
-    if (found.has(name) || !entry) continue;
-    found.add(name);
-    for (const field of [
-      "dependencies",
-      "optionalDependencies",
-      "peerDependencies",
-    ] as const)
-      pending.push(...Object.keys(entry[field] ?? {}));
+function installedPackage(from: string, name: string): string | undefined {
+  for (let dir = from; ; dir = dirname(dir)) {
+    const candidate = join(dir, "node_modules", name);
+    if (existsSync(join(candidate, "package.json"))) return candidate;
+    if (dir === ".") return undefined;
   }
-  return [...found];
+}
+/**
+ * The top-level installed packages a live self-check loads: the runtime
+ * dependencies and Vitest, with their own, each found as Node finds it. A
+ * nested package travels with the top-level package that holds it. Copying
+ * only these, and none of this checkout's run caches, keeps the test fast on a
+ * busy machine; the reads are synchronous for the same reason.
+ */
+function selfCheckPackages(): string[] {
+  const manifest = (dir: string): Manifest =>
+    JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as Manifest;
+  const found = new Set<string>();
+  const pending = Object.keys(manifest(".").dependencies ?? {})
+    .concat("vitest")
+    .map((name) => installedPackage(".", name));
+  while (pending.length) {
+    const dir = pending.pop();
+    if (!dir || found.has(dir)) continue;
+    found.add(dir);
+    const own = manifest(dir);
+    for (const name of dependencyFields.flatMap((field) =>
+      Object.keys(own[field] ?? {}),
+    ))
+      pending.push(installedPackage(dir, name));
+  }
+  const topLevel = [...found].map((dir) =>
+    dir.replace(/^node_modules\/((?:@[^/]+\/)?[^/]+).*$/, "$1"),
+  );
+  return [...new Set(topLevel)];
 }
 async function copyInstalledModules(root: string): Promise<void> {
   const { cp, mkdir } = await import("node:fs/promises");
@@ -244,7 +262,7 @@ async function copyInstalledModules(root: string): Promise<void> {
   const source = resolve("node_modules");
   const destination = join(root, "node_modules");
   const results = await Promise.allSettled(
-    (await selfCheckPackages()).map(async (name) => {
+    selfCheckPackages().map(async (name) => {
       await mkdir(dirname(join(destination, name)), { recursive: true });
       await cp(join(source, name), join(destination, name), {
         recursive: true,

@@ -32,7 +32,7 @@
 **Priority:** P1
 **Depends on:** the owner's decision on raising the timeout
 
-**Completed:** unreleased (2026-11-22). The test copies only the installed packages the self-check loads (the runtime dependencies and Vitest with their own, read from `node_modules/.package-lock.json`) and none of this checkout's run caches. It no longer repeats the two fingerprints `checkedScenario` already makes, and the owner agreed to a 90 s timeout. On 8 cores it took 13.7 s idle and timed out at 97 s with 48 busy loops; now it takes 6.8 s idle, 39 s with 48 busy loops and 55 s with 64.
+**Completed:** unreleased (2026-11-22). The test copies only the installed packages the self-check loads (the runtime dependencies and Vitest with their own, each found from the installed `package.json` files as Node finds it) and none of this checkout's run caches. It no longer repeats the two fingerprints `checkedScenario` already makes, and the owner agreed to a 90 s timeout. On 8 cores it took 13.7 s idle and timed out at 97 s with 48 busy loops; across repeated runs it takes about 7 s idle, 39 to 56 s with 48 busy loops and 55 to 76 s with 64.
 
 ## Settings commands
 
