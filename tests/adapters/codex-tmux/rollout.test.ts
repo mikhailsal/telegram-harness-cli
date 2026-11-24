@@ -82,3 +82,47 @@ it("ignores metadata-tagged Codex setup while preserving genuine user text", () 
     rolloutEvent(input([{ text: instructions }], ["future.unknown"]), "s", "5"),
   ).toMatchObject({ kind: "input", text: instructions });
 });
+it("reports a request_user_input_async question as a marked output", () => {
+  // Shaped after a Codex 0.171.0 rollout record.
+  const line = (item: Record<string, unknown>) =>
+    JSON.stringify({
+      type: "event_msg",
+      payload: { type: "item_completed", turn_id: "turn", item },
+    });
+  const text = "Cats or dogs?\n- cats\n- dogs";
+  // protects=the tmux adapter forwards the async question mid-turn; fails_when=only task_complete's last message is read; no_claim=how the engine delivers it
+  expect(
+    rolloutEvent(
+      line({
+        type: "AgentMessage",
+        id: "call_1",
+        content: [{ type: "Text", text }],
+        delivery: "async",
+      }),
+      "s",
+      "10",
+    ),
+  ).toEqual({
+    kind: "output",
+    sessionId: "s",
+    cursor: "10",
+    turnId: "turn",
+    text,
+    data: { delivery: "async" },
+  });
+  // protects=ordinary agent messages still wait for task_complete; fails_when=every message is forwarded mid-turn; no_claim=none beyond protects
+  expect(
+    rolloutEvent(
+      line({ type: "AgentMessage", content: [{ type: "Text", text: "Hi" }] }),
+      "s",
+      "11",
+    ),
+  ).toBeUndefined();
+  expect(
+    rolloutEvent(
+      line({ type: "AgentMessage", content: [], delivery: "async" }),
+      "s",
+      "12",
+    ),
+  ).toBeUndefined();
+});

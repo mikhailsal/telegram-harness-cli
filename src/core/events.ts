@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { catalog, renderOutgoing } from "../channels/index.js";
+import { catalog } from "../channels/index.js";
 import type { AdapterEvent } from "../adapters/contract.js";
 import type { Turn } from "../store/index.js";
 import type { RuntimeContext } from "./context.js";
@@ -21,6 +21,7 @@ import {
   routingTurnId,
 } from "./continuation.js";
 import { noticeModelUnavailable } from "./harness-settings-notice.js";
+import { enqueueMidTurn, isAsyncOutput, queueAsyncOutput } from "./mid-turn.js";
 export { queueRequestSummaries } from "./request-summary.js";
 
 export function activeTurn(
@@ -66,11 +67,16 @@ export class AdapterEvents {
       return;
     }
     if (event.kind === "output") {
-      if (event.text !== undefined)
-        this.ctx.store.setCursor(`turn-output/${turn.id}`, event.text);
+      this.output(event, turn);
       return;
     }
     if (event.kind === "turn-completed") await this.completedEvent(event, turn);
+  }
+  // A mid-turn question goes out at once; any other output may be the answer.
+  private output(event: AdapterEvent, turn: Turn): void {
+    if (isAsyncOutput(event)) queueAsyncOutput(this.ctx, turn, event);
+    else if (event.text !== undefined)
+      this.ctx.store.setCursor(`turn-output/${turn.id}`, event.text);
   }
   // `error` is a lost connection; `turn-error` is one failed turn.
   private errorEvent(event: AdapterEvent): boolean {
@@ -192,37 +198,15 @@ export class AdapterEvents {
     // A continuation's input is Codex resuming a Telegram task, not terminal
     // typing, and the bridge already knows the chat it belongs to.
     if (continuedTurnId(this.ctx.store, turn)) return;
-    const marker = `mirror/${turn.id}/${event.cursor}`;
-    if (this.ctx.store.getCursor(marker)) return;
     const chat = this.ctx.store.getCursor("chat-id");
     if (!chat || !event.text) return;
-    const text = `${this.ctx.config.non_tg_marker} ${event.text}`;
-    const chunks = renderOutgoing(
-      text,
-      this.ctx.config.markup.tags.map((tag) => tag.name),
-    ).chunks;
-    let index = Math.min(
-      0,
-      ...this.ctx.store
-        .listOutbox(["pending", "sending", "sent", "failed"])
-        .filter((row) => row.turnId === turn.id)
-        .map((row) => row.chunk),
-    );
-    for (const [part, chunk] of chunks.entries()) {
-      index--;
-      this.ctx.store.enqueueOutbox({
-        id: `${marker}/${String(part)}`,
-        turnId: turn.id,
-        chunk: index,
-        chatId: chat,
-        text: chunk.text,
-        createdAt: this.ctx.now().toISOString(),
-        format: chunk.kind === "file" ? "document" : "rich",
-        payload: JSON.stringify({ ...chunk, author: "user" }),
-        disableNotification: true,
-      });
-    }
-    this.ctx.store.setCursor(marker, "1");
+    enqueueMidTurn(this.ctx, turn, {
+      marker: `mirror/${turn.id}/${event.cursor}`,
+      chatId: chat,
+      text: `${this.ctx.config.non_tg_marker} ${event.text}`,
+      author: "user",
+      silent: true,
+    });
   }
   private async approval(event: AdapterEvent, turn: Turn): Promise<void> {
     const owner = routingTurnId(this.ctx.store, turn.id);

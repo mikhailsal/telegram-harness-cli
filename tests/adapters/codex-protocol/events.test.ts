@@ -174,3 +174,43 @@ describe("turn chains", () => {
       expect(historyEvents("thread", turn)[0]).not.toHaveProperty("data");
   });
 });
+
+describe("async questions", () => {
+  it("marks a request_user_input_async message and leaves other answers plain", () => {
+    // Shaped after Codex 0.171.0's item/completed for request_user_input_async.
+    const asked = notification.parse({
+      method: "item/completed",
+      params: {
+        threadId: "thread",
+        turnId: "turn",
+        item: {
+          type: "agentMessage",
+          id: "call_1",
+          text: "Cats or dogs?\n- cats\n- dogs",
+          phase: "final_answer",
+          delivery: "async",
+          questions: [{ title: "Cats or dogs?", options: ["cats", "dogs"] }],
+        },
+      },
+    });
+    if (!asked.params.item) throw new Error("missing item");
+    // protects=the async question reaches the engine marked as such; fails_when=the schema or the event drops delivery; no_claim=how the engine delivers it (core tests cover that)
+    expect(itemEvent("thread", "turn", asked.params.item)).toEqual({
+      sessionId: "thread",
+      turnId: "turn",
+      kind: "output",
+      cursor: "turn/item/call_1",
+      text: "Cats or dogs?\n- cats\n- dogs",
+      data: { delivery: "async" },
+    });
+    // protects=ordinary answers keep a data-free output event; fails_when=a null delivery is reported as async; no_claim=none beyond protects
+    expect(
+      itemEvent("thread", "turn", {
+        type: "agentMessage",
+        id: "msg_1",
+        text: "Done",
+        delivery: null,
+      }),
+    ).not.toHaveProperty("data");
+  });
+});

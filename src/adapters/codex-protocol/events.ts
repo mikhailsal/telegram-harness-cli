@@ -26,10 +26,13 @@ export function itemEvent(
     return result;
   }
   if (item.type === "agentMessage" && item.text !== undefined) {
-    return {
+    const result: AdapterEvent = {
       ...event(sessionId, turnId, "output", `item/${item.id}`),
       text: item.text,
     };
+    // A request_user_input_async question, sent to the owner mid-turn.
+    if (item.delivery === "async") result.data = { delivery: "async" };
+    return result;
   }
   return undefined;
 }
