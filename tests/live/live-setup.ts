@@ -214,6 +214,15 @@ function liveConfig(
     submit_ack_timeout: 45,
   });
 }
+// Codex refuses to resume a new thread until its rollout exists. Codex 0.172
+// also refuses while the thread's first turn is still starting.
+function historyPending(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.message.startsWith("no rollout found for thread id ") ||
+      error.message === "list_turns is not supported yet")
+  );
+}
 export async function waitForHistory(
   open: () => Promise<LiveHistory>,
   state: RunnerState,
@@ -223,11 +232,7 @@ export async function waitForHistory(
       try {
         return await open();
       } catch (error) {
-        if (
-          error instanceof Error &&
-          error.message.startsWith("no rollout found for thread id ")
-        )
-          return undefined;
+        if (historyPending(error)) return undefined;
         throw error;
       }
     },

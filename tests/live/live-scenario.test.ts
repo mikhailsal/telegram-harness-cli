@@ -1,4 +1,4 @@
-import { test } from "vitest";
+import { test, vi } from "vitest";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -112,7 +112,7 @@ test("queues a second turn, restarts mid-command, and verifies ordered delivery"
     await f.close();
   }
 });
-test("waits for rollout materialization and propagates unrelated observer errors", async () => {
+test("waits for the owned thread's history and propagates unrelated observer errors", async () => {
   let attempts = 0;
   const history = {
     read: () => Promise.resolve({ tools: [] }),
@@ -122,19 +122,41 @@ test("waits for rollout materialization and propagates unrelated observer errors
   };
   assert.equal(
     await waitForHistory(() => {
-      if (++attempts === 1)
+      attempts++;
+      if (attempts === 1)
         return Promise.reject(
           new Error("no rollout found for thread id owned"),
         );
+      if (attempts === 2)
+        return Promise.reject(new Error("list_turns is not supported yet"));
       return Promise.resolve(history);
     }, {}),
     history,
   );
-  assert.equal(attempts, 2);
+  assert.equal(attempts, 3);
   await assert.rejects(
     waitForHistory(() => Promise.reject(new Error("permission denied")), {}),
     /permission denied/,
   );
+});
+test("a lasting history refusal still fails, and a bridge failure comes first", async () => {
+  const refusal = () =>
+    Promise.reject(new Error("list_turns is not supported yet"));
+  await assert.rejects(
+    waitForHistory(refusal, { error: new Error("bridge failed") }),
+    /bridge failed/,
+  );
+  vi.useFakeTimers();
+  try {
+    const waiting = assert.rejects(
+      waitForHistory(refusal, {}),
+      /timed out: owned thread rollout to materialize/,
+    );
+    await vi.advanceTimersByTimeAsync(121000);
+    await waiting;
+  } finally {
+    vi.useRealTimers();
+  }
 });
 test("cleanup releases the owned barrier before stopping the bridge", async () => {
   const root = await mkdtemp(join(tmpdir(), "thc-live-cleanup-"));
