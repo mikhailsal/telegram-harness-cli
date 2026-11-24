@@ -17,6 +17,7 @@ export const itemSchema = z
     clientId: z.string().nullish(),
     text: z.string().optional(),
     content: z.array(contentSchema).optional(),
+    delivery: z.string().nullish(),
   })
   .loose();
 export const turnSchema = z

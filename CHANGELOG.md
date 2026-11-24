@@ -3,7 +3,7 @@
 All notable changes to `thc` are listed here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [0.2.0] - 2026-11-22
+## [0.2.0] - 2026-11-24
 
 ### Added
 
@@ -18,6 +18,14 @@ All notable changes to `thc` are listed here. Versions follow
   that `/model` and `/effort` need, under `version.modelList`. Before, it only
   compared the version with the tested baseline, so an owner sent to doctor by
   the "cannot list models" reply learned nothing about model switching.
+
+### Fixed
+
+- A question Codex asks during a task now reaches Telegram at once as its own
+  message, and you answer it with your next message. Codex sends such
+  questions alongside its other messages (the `request_user_input_async`
+  tool), and the bridge kept only the last message of a task, so the question
+  never arrived.
 
 ## [0.1.3] - 2026-11-21
 

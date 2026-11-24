@@ -78,6 +78,7 @@ function turnEvent(
           : {}),
       },
     };
+  if (payload.type === "item_completed") return asyncMessage(payload, base);
   if (payload.type === "task_started") return { kind: "turn-started", ...base };
   if (payload.type === "turn_aborted")
     return {
@@ -92,6 +93,24 @@ function turnEvent(
       : { kind: "turn-completed", ...base, text };
   }
   return undefined;
+}
+
+// A request_user_input_async question reaches Telegram mid-turn; other agent
+// messages wait for task_complete's last message.
+function asyncMessage(
+  payload: RecordData,
+  base: { sessionId: string; cursor: string; turnId?: string },
+): AdapterEvent | undefined {
+  const item = record(payload.item);
+  if (item?.type !== "AgentMessage" || item.delivery !== "async")
+    return undefined;
+  const content = Array.isArray(item.content) ? item.content : [];
+  const text = content
+    .map((part: unknown) => str(record(part)?.text) ?? "")
+    .join("");
+  return text
+    ? { kind: "output", ...base, text, data: { delivery: "async" } }
+    : undefined;
 }
 
 export async function readRollout(

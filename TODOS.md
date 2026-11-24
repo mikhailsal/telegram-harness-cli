@@ -93,6 +93,30 @@
 **Priority:** P2
 **Depends on:** None
 
+### Option buttons for a mid-turn Codex question
+
+**What:** a question Codex asks through `request_user_input_async` shows its options as buttons, and a tap answers it.
+
+**Why:** the question arrives as plain text and the owner types the answer, which in Queue mode waits for the turn to end; Codex's own client answers inside the running turn.
+
+**Context:** the item carries `questions: [{title, options}]` (Codex 0.171.0, `AsyncUserInputQuestion`). The VS Code client answers with a `<send_user_message_question_reply>` block naming `questionItemId`. Needs persisted options, callback data, stale taps and a per-message steer in `steerTurn` (`src/core/engine-submit.ts`); the message is sent by `queueAsyncOutput` in `src/core/mid-turn.ts`.
+
+**Effort:** human M / CC S
+**Priority:** P2
+**Depends on:** None
+
+### Only the last of several final answers reaches Telegram
+
+**What:** a turn whose Codex run sends two final answers delivers both, not only the second.
+
+**Why:** the bridge keeps one output per turn (`turn-output/<turn>` in `src/core/events.ts`; `task_complete.last_agent_message` in tmux). In 3 of 587 recent turns the model wrote a full answer, then a short closing line, and Telegram would show only that line.
+
+**Context:** commentary (`phase: "commentary"`) must stay out. A fix could send each earlier `final_answer` item through `enqueueMidTurn`.
+
+**Effort:** human S / CC S
+**Priority:** P3
+**Depends on:** None
+
 ## Doctor
 
 ### `thc doctor` can wait 30 s for a daemon that stops answering
