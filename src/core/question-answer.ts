@@ -3,7 +3,7 @@ import { catalog } from "../channels/index.js";
 import type { ChannelEvent, InlineButton } from "../channels/index.js";
 import type { TurnInput } from "../store/index.js";
 import type { RuntimeContext } from "./context.js";
-import { questionKey, questionRecord } from "./async-question.js";
+import { buttonLabel, questionKey, questionRecord } from "./async-question.js";
 import type { QuestionRecord } from "./async-question.js";
 
 type DecisionEvent = Extract<ChannelEvent, { kind: "decision" }>;
@@ -90,7 +90,7 @@ function setButtons(
   );
 }
 const answeredRow = (id: string, answer: string): InlineButton[][] => [
-  [{ text: `✓ ${answer}`, callback_data: `aq:${id}:-` }],
+  [{ text: buttonLabel(`✓ ${answer}`), callback_data: `aq:${id}:-` }],
 ];
 function commit(
   ctx: RuntimeContext,

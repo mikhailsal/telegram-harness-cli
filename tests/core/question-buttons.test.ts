@@ -254,7 +254,7 @@ it("keeps questions it cannot offer as buttons readable as text", async () => {
 
 // Value: protects=a long option stays readable and answers in full; fails_when=the message hides it behind a cut button or the reply carries the cut label; why_new=button labels are new; seam=adapter.steer; no_claim=how a client wraps a button
 it("lists long options in the message and answers with the full option", async () => {
-  const { engine, store, deliverChunk, adapter } = buttonSetup();
+  const { engine, store, deliverChunk, adapter, edit } = buttonSetup();
   try {
     const long = `Use the stored repository prices ${"x".repeat(60)}`;
     await engine.accept([message(7, "ask me")], 8);
@@ -276,6 +276,13 @@ it("lists long options in the message and answers with the full option", async (
     const text = sent.text;
     expect(text).toContain(`"answer":"${long}"`);
     expect(text).toContain('"question":"Which prices?"');
+    // protects=the button that shows the long answer is cut like the option buttons; fails_when=the collapsed label carries the whole option; no_claim=Telegram's own label limit
+    const shown = edit.mock.calls[0]?.[2] as {
+      reply_markup: { inline_keyboard: { text: string }[][] };
+    };
+    const label = shown.reply_markup.inline_keyboard[0]?.[0]?.text ?? "";
+    expect(Array.from(label)).toHaveLength(64);
+    expect(label.startsWith("✓ Use the stored")).toBe(true);
   } finally {
     await engine.close();
     store.close();

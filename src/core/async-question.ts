@@ -44,6 +44,12 @@ export const questionRecord = z.strictObject({
 export type QuestionRecord = z.infer<typeof questionRecord>;
 export const questionKey = (id: string): string => `async-question/${id}`;
 
+export function buttonLabel(text: string): string {
+  const chars = Array.from(text.trim());
+  return chars.length > maxLabel
+    ? `${chars.slice(0, maxLabel - 1).join("")}…`
+    : chars.join("");
+}
 export function isAsyncOutput(event: AdapterEvent): boolean {
   return event.kind === "output" && asyncSchema.safeParse(event.data).success;
 }
@@ -57,14 +63,9 @@ function buttons(
     options.some((option) => !option.trim())
   )
     return undefined;
-  return options.map((option, index) => {
-    const chars = Array.from(option.trim());
-    const text =
-      chars.length > maxLabel
-        ? `${chars.slice(0, maxLabel - 1).join("")}…`
-        : chars.join("");
-    return [{ text, callback_data: `aq:${id}:${String(index)}` }];
-  });
+  return options.map((option, index) => [
+    { text: buttonLabel(option), callback_data: `aq:${id}:${String(index)}` },
+  ]);
 }
 interface Prepared {
   text: string;
