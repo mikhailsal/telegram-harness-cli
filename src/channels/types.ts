@@ -54,6 +54,16 @@ export interface DeliveryResult {
   messageIds: number[];
   visibleText: string;
 }
+export interface InlineButton {
+  text: string;
+  callback_data: string;
+}
+/** Bot API options shared by every message a chunk is sent as. */
+export interface SendExtra {
+  disable_notification: boolean;
+  reply_parameters?: { message_id: number };
+  reply_markup?: { inline_keyboard: InlineButton[][] };
+}
 export interface SendOptions {
   finalDraftId?: number;
   consumeDraft?: boolean;
@@ -63,4 +73,5 @@ export interface SendOptions {
   fallbackReplyToMessageId?: number;
   silent?: boolean;
   format?: TelegramMessageFormat;
+  keyboard?: InlineButton[][];
 }

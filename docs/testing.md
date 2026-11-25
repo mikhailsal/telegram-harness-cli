@@ -54,6 +54,11 @@ test bot in a Telegram client, or decides to release without it this time (see
   original message times; keep quotes when an answer needs a source reference.
 - Tap both approval choices, check the collapsed details and stale-button toast.
 - Check a question, a reaction, a reply and a forwarded message.
+- Ask Codex to send a question with options through `request_user_input_async`
+  during a task. Each question arrives as its own message with option buttons.
+  In Queue mode a tap answers inside the running task, the buttons then show
+  the answer, and a second tap shows the stale toast. A tap after the task
+  ended starts the next task.
 - Send a photo, album, voice note and document; verify captions and local paths.
 - Check queue status, silent continuations and removal of temporary messages.
 - Check that command inputs remain in the chat and visible history after another

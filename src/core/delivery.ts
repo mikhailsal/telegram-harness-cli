@@ -24,6 +24,11 @@ const chunkSchema = z.strictObject({
   fileName: z.string().optional(),
   digest: z.string().optional(),
   workspace: z.string().optional(),
+  keyboard: z
+    .array(
+      z.array(z.strictObject({ text: z.string(), callback_data: z.string() })),
+    )
+    .optional(),
 });
 type Chunk = z.infer<typeof chunkSchema>;
 type TerminalStatus = "completed" | "failed" | "cancelled" | "interrupted";
@@ -214,14 +219,13 @@ export class Delivery {
     if (!store.beginSend(row.id, this.context.now().toISOString())) return;
     const chunk = this.prepareChunk(row);
     if (!chunk) return;
-    const { automaticReply, ...renderedChunk } = chunk;
+    const { automaticReply, keyboard, ...renderedChunk } = chunk;
     let delivered: Awaited<ReturnType<typeof channel.deliverChunk>>;
     try {
-      delivered = await channel.deliverChunk(
-        row.chatId,
-        renderedChunk,
-        deliveryOptions(this.context, row, chunk, automaticReply),
-      );
+      delivered = await channel.deliverChunk(row.chatId, renderedChunk, {
+        ...deliveryOptions(this.context, row, chunk, automaticReply),
+        ...(keyboard ? { keyboard } : {}),
+      });
       if (delivered.messageIds[0] === undefined) {
         store.markFailed(row.id, "missing-message-id");
         this.notifyFailure(row);

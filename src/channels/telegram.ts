@@ -10,6 +10,7 @@ import type { RenderChunk } from "./render.js";
 import type {
   ChannelPollResult,
   DeliveryResult,
+  SendExtra,
   SendOptions,
   TelegramChannelOptions,
   TelegramMessageFormat,
@@ -162,10 +163,13 @@ export class TelegramChannel {
     chunk: RenderChunk,
     options: SendOptions = {},
   ): Promise<DeliveryResult> {
-    const extra = {
+    const extra: SendExtra = {
       disable_notification: options.silent === true || chunk.kind === "file",
       ...(options.replyToMessageId
         ? { reply_parameters: { message_id: options.replyToMessageId } }
+        : {}),
+      ...(options.keyboard
+        ? { reply_markup: { inline_keyboard: options.keyboard } }
         : {}),
     };
     const delivered = await this.sendChunk(
@@ -180,10 +184,7 @@ export class TelegramChannel {
   private async sendChunk(
     chatId: string,
     chunk: RenderChunk,
-    extra: {
-      disable_notification: boolean;
-      reply_parameters?: { message_id: number };
-    },
+    extra: SendExtra,
     fallbackReplyToMessageId?: number,
     options: SendOptions = {},
   ): Promise<{ id: number; text: string }> {
@@ -233,10 +234,7 @@ export class TelegramChannel {
   private async sendRichChunk(
     chatId: string,
     chunk: RenderChunk,
-    extra: {
-      disable_notification: boolean;
-      reply_parameters?: { message_id: number };
-    },
+    extra: SendExtra,
     fallbackReplyToMessageId?: number,
   ): Promise<{ id: number; text: string }> {
     try {
@@ -277,10 +275,7 @@ export class TelegramChannel {
   private async sendLocalMedia(
     chatId: string,
     chunk: RenderChunk,
-    extra: {
-      disable_notification: boolean;
-      reply_parameters?: { message_id: number };
-    },
+    extra: SendExtra,
   ): Promise<{ id: number; text: string }> {
     if (!chunk.workspace || !chunk.filePath || !chunk.fileName || !chunk.digest)
       throw new LocalMediaError("invalid-local-file");

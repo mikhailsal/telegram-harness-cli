@@ -1,10 +1,10 @@
 import { MessageStore } from "./messages.js";
-import { ResourceStore } from "./resources.js";
+import { QuestionStore } from "./questions.js";
 
 export type * from "./types.js";
 export { readStoreIdentity, type StoreIdentity } from "./identity.js";
 export { SCHEMA_VERSION } from "./schema.js";
-export class Store extends ResourceStore {}
+export class Store extends QuestionStore {}
 export function openStore(path: string): Store {
   return new Store(path);
 }

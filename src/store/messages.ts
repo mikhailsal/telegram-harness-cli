@@ -36,7 +36,10 @@ function decode(value: string | undefined): [string, string] {
 type StoredMessage = Omit<VisibleMessage, "possiblyDuplicated"> & {
   possiblyDuplicated: number;
 };
-type InternalHistoryInput = Omit<VisibleMessageInput, "telegramMessageId">;
+export type InternalHistoryInput = Omit<
+  VisibleMessageInput,
+  "telegramMessageId"
+>;
 function normalize(row: StoredMessage): VisibleMessage {
   return { ...row, possiblyDuplicated: Boolean(row.possiblyDuplicated) };
 }
@@ -137,7 +140,7 @@ export class MessageStore extends RequestStore {
       )
       .run(id);
   }
-  private insertInternalMessage(history: InternalHistoryInput): boolean {
+  protected insertInternalMessage(history: InternalHistoryInput): boolean {
     const row = this.db
       .prepare(
         "SELECT min(telegramMessageId) AS id FROM messages WHERE telegramMessageId<0",

@@ -85,8 +85,9 @@ export function recordReaction(ctx: RuntimeContext, event: Reaction): void {
     text,
   );
 }
+// A button answer carries no reactions, so they wait for the next message.
 export function trackReaction(ctx: RuntimeContext, turnId: string): void {
-  ctx.store.captureReaction(turnId);
+  if (!ctx.store.questionReply(turnId)) ctx.store.captureReaction(turnId);
 }
 export function acceptReaction(ctx: RuntimeContext, turnId: string): void {
   ctx.store.acceptReaction(turnId);

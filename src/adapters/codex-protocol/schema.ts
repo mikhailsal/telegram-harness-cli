@@ -18,6 +18,8 @@ export const itemSchema = z
     text: z.string().optional(),
     content: z.array(contentSchema).optional(),
     delivery: z.string().nullish(),
+    // request_user_input_async options; the engine validates them itself.
+    questions: z.unknown().optional(),
   })
   .loose();
 export const turnSchema = z

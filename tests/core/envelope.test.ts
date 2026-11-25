@@ -155,7 +155,11 @@ it("applies the configured timezone when preparing a queued turn", async () => {
   };
   const ctx = {
     config: { timezone: "Europe/Moscow" },
-    store: { listInbox: () => [row], getCursor: () => undefined },
+    store: {
+      listInbox: () => [row],
+      getCursor: () => undefined,
+      questionReply: () => undefined,
+    },
   };
   const result = await turnText(
     ctx as unknown as import("../../src/core/context.js").RuntimeContext,

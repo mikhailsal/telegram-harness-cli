@@ -12,6 +12,7 @@ import { settingsHeld } from "./harness-settings-runner.js";
 import type { CommandDelivery } from "./commands.js";
 import { AdapterEvents, activeTurn, queueRequestSummaries } from "./events.js";
 import { recordReaction } from "./interactions.js";
+import { answerQuestion } from "./question-answer.js";
 import {
   collectMessages,
   consumeTurnInbox,
@@ -182,11 +183,7 @@ export class TurnEngine {
       if (event.kind === "command") {
         await this.processCommand(event);
       }
-      if (event.kind === "decision") {
-        if (!(await this.events.pending.decision(event)))
-          await this.commands.decision(event);
-        queueRequestSummaries(this.ctx);
-      }
+      if (event.kind === "decision") await this.decide(event);
       if (event.kind === "reaction") {
         recordReaction(this.ctx, event);
         continue;
@@ -197,6 +194,16 @@ export class TurnEngine {
       this.ctx.store.consumeControl(event.updateId);
     }
     collectMessages(this.ctx);
+  }
+  private async decide(
+    event: Extract<ChannelEvent, { kind: "decision" }>,
+  ): Promise<void> {
+    if (
+      !(await this.events.pending.decision(event)) &&
+      !(await answerQuestion(this.ctx, event))
+    )
+      await this.commands.decision(event);
+    queueRequestSummaries(this.ctx);
   }
   private async processCommand(
     event: Extract<ChannelEvent, { kind: "command" }>,

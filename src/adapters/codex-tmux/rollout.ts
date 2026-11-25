@@ -108,9 +108,13 @@ function asyncMessage(
   const text = content
     .map((part: unknown) => str(record(part)?.text) ?? "")
     .join("");
-  return text
-    ? { kind: "output", ...base, text, data: { delivery: "async" } }
-    : undefined;
+  if (!text) return undefined;
+  const data = {
+    delivery: "async",
+    itemId: str(item.id) ?? null,
+    questions: item.questions ?? null,
+  };
+  return { kind: "output", ...base, text, data };
 }
 
 export async function readRollout(
