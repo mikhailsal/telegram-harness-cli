@@ -132,6 +132,8 @@ it("steers a tapped answer into the running task, once", async () => {
     expect(edit).toHaveBeenLastCalledWith("1", 100, {
       reply_markup: { inline_keyboard: done },
     });
+    // protects=the answered button already shows the answer, so its tap edits nothing; fails_when=the same markup is re-sent and Telegram rejects it as not modified; no_claim=none beyond protects
+    expect(edit).toHaveBeenCalledTimes(2);
     await engine.accept([message(15, "and another thing")], 16);
     // protects=Queue mode still holds a typed message for the next task; fails_when=the answer path steers every follow-up; no_claim=none beyond protects
     expect(adapter.steer).toHaveBeenCalledTimes(1);

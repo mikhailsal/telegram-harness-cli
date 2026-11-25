@@ -136,6 +136,8 @@ async function stale(
       ),
     "callback_ack_failed",
   );
+  // The collapsed button already shows the answer.
+  if (event.data.endsWith(":-")) return true;
   if (record?.answer !== undefined)
     await setButtons(ctx, event, answeredRow(id, record.answer));
   else if (record && record.sessionId !== ctx.sessionId)
