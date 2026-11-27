@@ -37,6 +37,13 @@ export function classifyTelegramError(error: unknown): {
 function isLocalMedia(chunk: RenderChunk): boolean {
   return chunk.kind === "photo" || chunk.kind === "document";
 }
+// A quoted message the user deleted must not cost the answer: Telegram then
+// sends it unquoted instead of rejecting it.
+function quoteOf(
+  messageId: number,
+): NonNullable<SendExtra["reply_parameters"]> {
+  return { message_id: messageId, allow_sending_without_reply: true };
+}
 export class TelegramChannel {
   readonly bot: Bot;
   private readonly allowed: Set<string>;
@@ -149,7 +156,7 @@ export class TelegramChannel {
       const extra = {
         disable_notification: silent,
         ...(options.replyToMessageId && ids.length === 0
-          ? { reply_parameters: { message_id: options.replyToMessageId } }
+          ? { reply_parameters: quoteOf(options.replyToMessageId) }
           : {}),
       };
       const delivered = await this.sendChunk(chatId, chunk, extra);
@@ -166,26 +173,19 @@ export class TelegramChannel {
     const extra: SendExtra = {
       disable_notification: options.silent === true || chunk.kind === "file",
       ...(options.replyToMessageId
-        ? { reply_parameters: { message_id: options.replyToMessageId } }
+        ? { reply_parameters: quoteOf(options.replyToMessageId) }
         : {}),
       ...(options.keyboard
         ? { reply_markup: { inline_keyboard: options.keyboard } }
         : {}),
     };
-    const delivered = await this.sendChunk(
-      chatId,
-      chunk,
-      extra,
-      options.fallbackReplyToMessageId,
-      options,
-    );
+    const delivered = await this.sendChunk(chatId, chunk, extra, options);
     return { messageIds: [delivered.id], visibleText: delivered.text };
   }
   private async sendChunk(
     chatId: string,
     chunk: RenderChunk,
     extra: SendExtra,
-    fallbackReplyToMessageId?: number,
     options: SendOptions = {},
   ): Promise<{ id: number; text: string }> {
     if (isLocalMedia(chunk)) return this.sendLocalMedia(chatId, chunk, extra);
@@ -212,7 +212,7 @@ export class TelegramChannel {
           : { onMessageCreated: options.onMessageCreated }),
       });
     await this.finishRichDraft(chatId, chunk, options.finalDraftId);
-    return this.sendRichChunk(chatId, chunk, extra, fallbackReplyToMessageId);
+    return this.sendRichChunk(chatId, chunk, extra);
   }
   private async finishRichDraft(
     chatId: string,
@@ -235,7 +235,6 @@ export class TelegramChannel {
     chatId: string,
     chunk: RenderChunk,
     extra: SendExtra,
-    fallbackReplyToMessageId?: number,
   ): Promise<{ id: number; text: string }> {
     try {
       const message = await this.bot.api.sendRichMessage(
@@ -246,18 +245,12 @@ export class TelegramChannel {
       return { id: message.message_id, text: chunk.plain };
     } catch (error) {
       if (classifyTelegramError(error).kind !== "bad-request") throw error;
-      const fallback = {
-        ...extra,
-        ...(fallbackReplyToMessageId === undefined
-          ? {}
-          : { reply_parameters: { message_id: fallbackReplyToMessageId } }),
-      };
       try {
         if (chunk.plain.length > 4096) throw error;
         const message = await this.bot.api.sendMessage(
           chatId,
           chunk.plain,
-          fallback,
+          extra,
         );
         return { id: message.message_id, text: chunk.plain };
       } catch (plainError) {
@@ -266,7 +259,7 @@ export class TelegramChannel {
         const message = await this.bot.api.sendDocument(
           chatId,
           new InputFile(Buffer.from(chunk.text), "response.md"),
-          { ...fallback, disable_notification: true },
+          { ...extra, disable_notification: true },
         );
         return { id: message.message_id, text: chunk.text };
       }

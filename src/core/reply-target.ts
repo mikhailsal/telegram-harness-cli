@@ -48,11 +48,3 @@ export function replySourceMessageId(
   )[0];
   return source?.telegramMessageId;
 }
-export function replyTarget(
-  store: Store,
-  turn: Turn,
-  chatId: string,
-): number | undefined {
-  const source = replySourceMessageId(store, turn, chatId);
-  return source === store.latestVisibleMessageId(chatId) ? undefined : source;
-}

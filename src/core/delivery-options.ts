@@ -1,6 +1,7 @@
 import type { RenderChunk, SendOptions } from "../channels/index.js";
 import type { Outbox } from "../store/index.js";
 import type { RuntimeContext } from "./context.js";
+import { replySourceMessageId } from "./reply-target.js";
 import { turnDraftId } from "./turn-draft.js";
 
 type Chunk = Pick<RenderChunk, "kind" | "style">;
@@ -53,25 +54,30 @@ function richDraftOptions(
     ? { finalDraftId: turnDraftId(turn) }
     : {};
 }
+// A stored target is an explicit quote. Without one, the first chunk of an
+// answer quotes its question unless the question is still the latest message,
+// decided when the answer is sent: a message that arrives while the answer
+// waits makes the quote necessary.
+function replyOptions(ctx: RuntimeContext, row: Outbox): SendOptions {
+  if (row.replyToMessageId !== null)
+    return { replyToMessageId: row.replyToMessageId };
+  if (row.chunk !== 0) return {};
+  const turn = ctx.store.getTurn(row.turnId);
+  const source = turn && replySourceMessageId(ctx.store, turn, row.chatId);
+  return source === undefined ||
+    source === ctx.store.latestVisibleMessageId(row.chatId)
+    ? {}
+    : { replyToMessageId: source };
+}
 export function deliveryOptions(
   ctx: RuntimeContext,
   row: Outbox,
   chunk: Chunk,
-  automaticReply: boolean | undefined,
 ): SendOptions {
-  const conversion = conversionOptions(ctx, row, chunk);
-  const replacesDraft =
-    automaticReply &&
-    (conversion.consumeDraft === true || matchingDraft(ctx, row, chunk));
   return {
     silent: row.disableNotification,
-    ...conversion,
+    ...conversionOptions(ctx, row, chunk),
     ...richDraftOptions(ctx, row, chunk),
-    ...(replacesDraft && row.replyToMessageId !== null
-      ? { fallbackReplyToMessageId: row.replyToMessageId }
-      : {}),
-    ...(row.replyToMessageId === null || replacesDraft
-      ? {}
-      : { replyToMessageId: row.replyToMessageId }),
+    ...replyOptions(ctx, row),
   };
 }

@@ -59,14 +59,17 @@ export function reasoningProgress(
   };
 }
 export class ReasoningProgress {
-  private item = "";
+  private part = "";
   private text = "";
   update(sessionId: string, message: Notification): AdapterEvent | undefined {
-    const { turnId, itemId, delta } = message.params;
+    const { turnId, itemId, delta, summaryIndex } = message.params;
     if (!turnId || typeof itemId !== "string" || typeof delta !== "string")
       return;
-    if (itemId !== this.item) {
-      this.item = itemId;
+    // Each summary part starts with its own bold heading and arrives without
+    // a separator, so a new part starts a new text.
+    const part = `${itemId}/${typeof summaryIndex === "number" ? String(summaryIndex) : ""}`;
+    if (part !== this.part) {
+      this.part = part;
       this.text = "";
     }
     this.text = (this.text + delta).slice(-512);

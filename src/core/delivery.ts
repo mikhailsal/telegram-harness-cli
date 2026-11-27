@@ -8,7 +8,6 @@ import {
 import type { RenderChunk } from "../channels/index.js";
 import type { Outbox, OutboxInput, Turn } from "../store/index.js";
 import type { RuntimeContext } from "./context.js";
-import { replyTarget } from "./reply-target.js";
 import { routingTurnId } from "./continuation.js";
 import { deliveryOptions } from "./delivery-options.js";
 import { messageFormat } from "./format.js";
@@ -18,6 +17,7 @@ const chunkSchema = z.strictObject({
   text: z.string(),
   plain: z.string(),
   author: z.enum(["assistant", "system", "user"]).optional(),
+  // Written by versions before 0.3.0; still read so their pending rows parse.
   automaticReply: z.boolean().optional(),
   style: z.literal("html").optional(),
   filePath: z.string().optional(),
@@ -35,7 +35,6 @@ type TerminalStatus = "completed" | "failed" | "cancelled" | "interrupted";
 interface FinishOptions {
   silent?: boolean;
   replyToMessageId?: number;
-  automaticReply?: boolean;
 }
 function fallbackText(context: RuntimeContext, status: TerminalStatus): string {
   const { config, store } = context;
@@ -98,12 +97,7 @@ export class Delivery {
             },
           ];
     const result = options.silent ? "" : rendered.visibleText || fallback;
-    const rows = this.rows(
-      turn,
-      chunks,
-      chatId,
-      this.replyOptions(turn, chatId, options),
-    );
+    const rows = this.rows(turn, chunks, chatId, options);
     return store.finishTurnAndEnqueue(
       turn.id,
       turn.status,
@@ -111,22 +105,6 @@ export class Delivery {
       { result, updatedAt: this.context.now().toISOString() },
       rows,
     );
-  }
-  private replyOptions(
-    turn: Turn,
-    chatId: string,
-    options: FinishOptions,
-  ): FinishOptions {
-    const replyToMessageId =
-      options.replyToMessageId ?? replyTarget(this.context.store, turn, chatId);
-    return {
-      ...options,
-      ...(options.replyToMessageId === undefined &&
-      replyToMessageId !== undefined
-        ? { automaticReply: true }
-        : {}),
-      ...(replyToMessageId === undefined ? {} : { replyToMessageId }),
-    };
   }
   private rows(
     turn: Turn,
@@ -140,12 +118,7 @@ export class Delivery {
       chunk: index,
       chatId,
       text: chunk.text,
-      payload: JSON.stringify({
-        ...chunk,
-        ...(index === 0 && options.automaticReply
-          ? { automaticReply: true }
-          : {}),
-      }),
+      payload: JSON.stringify(chunk),
       format:
         chunk.kind === "message"
           ? chunk.style === "html"
@@ -219,11 +192,12 @@ export class Delivery {
     if (!store.beginSend(row.id, this.context.now().toISOString())) return;
     const chunk = this.prepareChunk(row);
     if (!chunk) return;
-    const { automaticReply, keyboard, ...renderedChunk } = chunk;
+    const { keyboard, ...renderedChunk } = chunk;
+    delete renderedChunk.automaticReply;
     let delivered: Awaited<ReturnType<typeof channel.deliverChunk>>;
     try {
       delivered = await channel.deliverChunk(row.chatId, renderedChunk, {
-        ...deliveryOptions(this.context, row, chunk, automaticReply),
+        ...deliveryOptions(this.context, row, chunk),
         ...(keyboard ? { keyboard } : {}),
       });
       if (delivered.messageIds[0] === undefined) {
