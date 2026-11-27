@@ -52,18 +52,6 @@ function visible(
     possiblyDuplicated: false,
   });
 }
-function delivery() {
-  return new Delivery({
-    store,
-    config: parseConfig({
-      token: { env: "TOKEN" },
-      allowlist: [1],
-      sandbox: "read-only",
-    }),
-    now: () => new Date(at),
-    log: vi.fn(),
-  } as unknown as RuntimeContext);
-}
 function sender() {
   const deliverChunk = vi
     .fn<TelegramChannel["deliverChunk"]>()
@@ -104,16 +92,19 @@ it("quotes the source when a message arrives while the answer waits to be sent",
     10,
   );
 });
-it("quotes the source of queued answers after intervening user or assistant text", () => {
+it("quotes the source of queued answers after intervening user or assistant text", async () => {
   const first = turn("first"),
     second = turn("second");
   visible(first.id, 10);
   visible(second.id, 11);
-  expect(delivery().finish(first, "completed", "first answer")).toBe(true);
-  expect(store.getOutbox(`${first.id}/0`)?.replyToMessageId).toBe(10);
-  visible(first.id, 12, "assistant");
-  expect(delivery().finish(second, "completed", "second answer")).toBe(true);
-  expect(store.getOutbox(`${second.id}/0`)?.replyToMessageId).toBe(11);
+  const { delivery: sending, deliverChunk } = sender();
+  deliverChunk.mockResolvedValueOnce({ messageIds: [12], visibleText: "a" });
+  expect(sending.finish(first, "completed", "first answer")).toBe(true);
+  await sending.flush();
+  expect(deliverChunk.mock.calls[0]?.[2]?.replyToMessageId).toBe(10);
+  expect(sending.finish(second, "completed", "second answer")).toBe(true);
+  await sending.flush();
+  expect(deliverChunk.mock.calls[1]?.[2]?.replyToMessageId).toBe(11);
 });
 it("targets the last accepted steer in the recipient chat without leaking another chat's message ID", () => {
   const parent = turn("parent", "shared");
@@ -153,7 +144,6 @@ it("quotes the source when the final message replaces its own live draft", async
     return Promise.resolve();
   };
   expect(sender.finish(source, "completed", "answer")).toBe(true);
-  expect(store.getOutbox(`${source.id}/0`)?.replyToMessageId).toBe(10);
   await sender.flush();
   expect(hasDraft).toHaveBeenCalledWith("1", turnDraftId(source), "rich");
   expect(deliverChunk.mock.calls[0]?.[2]).toHaveProperty(
@@ -249,7 +239,7 @@ it("uses a rich carrier to replace the preview before converting a regular answe
   expect(deliverChunk.mock.calls[0]?.[1]).toMatchObject({ style: "html" });
 });
 
-// Value: protects=an answer queued by an older version, whose payload carries automaticReply, parses and keeps its quote; fails_when=the chunk schema drops the field or the flag suppresses a needed quote; why_new=the flag now means the quote is rechecked at send time; seam=outbox payload to deliverChunk; no_claim=rows of other versions
+// Value: protects=an answer queued by an older version, whose payload still carries automaticReply, parses and keeps its quote; fails_when=the chunk schema drops the legacy field or the flag suppresses the quote; why_new=the flag is no longer written; seam=outbox payload to deliverChunk; no_claim=rows of other versions
 it("delivers a queued answer written by an older version with its quote", async () => {
   const source = turn("ccddee-source");
   const deliverChunk = vi
@@ -284,4 +274,26 @@ it("delivers a queued answer written by an older version with its quote", async 
   await new Delivery(ctx).flush();
   expect(deliverChunk.mock.calls[0]?.[2]?.replyToMessageId).toBe(10);
   expect(deliverChunk.mock.calls[0]?.[1]).not.toHaveProperty("automaticReply");
+});
+// Value: protects=an answer an older version queued without a target, because its question was then the latest message, quotes it when a newer message arrives before the upgrade sends it; fails_when=a row without a stored target is never given an automatic quote; why_new=older versions stored no target for that case; seam=outbox row to deliverChunk; no_claim=rows of other versions
+it("quotes the source of an older version's unquoted answer once a newer message arrives", async () => {
+  const source = turn("ddeeff-source");
+  visible(source.id, 10);
+  visible(turn("newer").id, 11);
+  store.enqueueOutbox({
+    id: `${source.id}/0`,
+    turnId: source.id,
+    chunk: 0,
+    chatId: "1",
+    text: "answer",
+    payload: JSON.stringify({
+      kind: "message",
+      text: "answer",
+      plain: "answer",
+    }),
+    createdAt: at,
+  });
+  const { delivery: sending, deliverChunk } = sender();
+  await sending.flush();
+  expect(deliverChunk.mock.calls[0]?.[2]?.replyToMessageId).toBe(10);
 });

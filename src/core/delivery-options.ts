@@ -1,11 +1,10 @@
 import type { RenderChunk, SendOptions } from "../channels/index.js";
 import type { Outbox } from "../store/index.js";
 import type { RuntimeContext } from "./context.js";
+import { replySourceMessageId } from "./reply-target.js";
 import { turnDraftId } from "./turn-draft.js";
 
-type Chunk = Pick<RenderChunk, "kind" | "style"> & {
-  automaticReply?: boolean | undefined;
-};
+type Chunk = Pick<RenderChunk, "kind" | "style">;
 function conversionOptions(
   ctx: RuntimeContext,
   row: Outbox,
@@ -55,22 +54,20 @@ function richDraftOptions(
     ? { finalDraftId: turnDraftId(turn) }
     : {};
 }
-// An automatic quote is decided when the answer is sent, not when it is
-// queued: a message that arrives while the answer waits makes the quote
-// necessary, and a question that is still the latest message needs none.
-function replyOptions(
-  ctx: RuntimeContext,
-  row: Outbox,
-  chunk: Chunk,
-): SendOptions {
-  const target = row.replyToMessageId;
-  if (target === null) return {};
-  if (
-    chunk.automaticReply &&
-    target === ctx.store.latestVisibleMessageId(row.chatId)
-  )
-    return {};
-  return { replyToMessageId: target };
+// A stored target is an explicit quote. Without one, the first chunk of an
+// answer quotes its question unless the question is still the latest message,
+// decided when the answer is sent: a message that arrives while the answer
+// waits makes the quote necessary.
+function replyOptions(ctx: RuntimeContext, row: Outbox): SendOptions {
+  if (row.replyToMessageId !== null)
+    return { replyToMessageId: row.replyToMessageId };
+  if (row.chunk !== 0) return {};
+  const turn = ctx.store.getTurn(row.turnId);
+  const source = turn && replySourceMessageId(ctx.store, turn, row.chatId);
+  return source === undefined ||
+    source === ctx.store.latestVisibleMessageId(row.chatId)
+    ? {}
+    : { replyToMessageId: source };
 }
 export function deliveryOptions(
   ctx: RuntimeContext,
@@ -81,6 +78,6 @@ export function deliveryOptions(
     silent: row.disableNotification,
     ...conversionOptions(ctx, row, chunk),
     ...richDraftOptions(ctx, row, chunk),
-    ...replyOptions(ctx, row, chunk),
+    ...replyOptions(ctx, row),
   };
 }
