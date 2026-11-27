@@ -13,6 +13,17 @@ All notable changes to `thc` are listed here. Versions follow
   the next one. The buttons then show the chosen answer, and a second tap or
   a tap after `/new` changes nothing. A typed answer still works.
 
+### Fixed
+
+- An answer that arrives after another message, such as the answers to queued
+  messages, quotes the message it answers again. Before, it dropped the quote
+  whenever it replaced its live preview, so you could not tell which question
+  it answered. An answer to a question you deleted still arrives, without the
+  quote; before, Telegram rejected it and the answer was lost.
+- The live status no longer shows two reasoning headings glued together with
+  `****` when Codex summarizes its thinking in several parts; it shows the
+  newest one.
+
 ## [0.2.0] - 2026-11-24
 
 ### Added
