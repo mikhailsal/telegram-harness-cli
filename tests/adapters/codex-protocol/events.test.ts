@@ -194,15 +194,28 @@ describe("async questions", () => {
       },
     });
     if (!asked.params.item) throw new Error("missing item");
-    // protects=the async question reaches the engine marked as such; fails_when=the schema or the event drops delivery; no_claim=how the engine delivers it (core tests cover that)
+    // protects=the async question reaches the engine marked as such, with the tool call its answer names and the options for buttons; fails_when=the schema or the event drops delivery, the item ID or the questions; no_claim=how the engine delivers it (core tests cover that)
     expect(itemEvent("thread", "turn", asked.params.item)).toEqual({
       sessionId: "thread",
       turnId: "turn",
       kind: "output",
       cursor: "turn/item/call_1",
       text: "Cats or dogs?\n- cats\n- dogs",
-      data: { delivery: "async" },
+      data: {
+        delivery: "async",
+        itemId: "call_1",
+        questions: [{ title: "Cats or dogs?", options: ["cats", "dogs"] }],
+      },
     });
+    // protects=an async message without questions (send_message_to_user_async) stays a plain async output; fails_when=a missing questions field breaks the event; no_claim=none beyond protects
+    expect(
+      itemEvent("thread", "turn", {
+        type: "agentMessage",
+        id: "call_2",
+        text: "Still working",
+        delivery: "async",
+      })?.data,
+    ).toEqual({ delivery: "async", itemId: "call_2", questions: null });
     // protects=ordinary answers keep a data-free output event; fails_when=a null delivery is reported as async; no_claim=none beyond protects
     expect(
       itemEvent("thread", "turn", {

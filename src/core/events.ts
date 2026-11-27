@@ -21,7 +21,8 @@ import {
   routingTurnId,
 } from "./continuation.js";
 import { noticeModelUnavailable } from "./harness-settings-notice.js";
-import { enqueueMidTurn, isAsyncOutput, queueAsyncOutput } from "./mid-turn.js";
+import { enqueueMidTurn } from "./mid-turn.js";
+import { isAsyncOutput, queueAsyncOutput } from "./async-question.js";
 export { queueRequestSummaries } from "./request-summary.js";
 
 export function activeTurn(

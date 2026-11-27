@@ -98,6 +98,7 @@ it("reports a request_user_input_async question as a marked output", () => {
         id: "call_1",
         content: [{ type: "Text", text }],
         delivery: "async",
+        questions: [{ title: "Cats or dogs?", options: ["cats", "dogs"] }],
       }),
       "s",
       "10",
@@ -108,7 +109,11 @@ it("reports a request_user_input_async question as a marked output", () => {
     cursor: "10",
     turnId: "turn",
     text,
-    data: { delivery: "async" },
+    data: {
+      delivery: "async",
+      itemId: "call_1",
+      questions: [{ title: "Cats or dogs?", options: ["cats", "dogs"] }],
+    },
   });
   // protects=ordinary agent messages still wait for task_complete; fails_when=every message is forwarded mid-turn; no_claim=none beyond protects
   expect(
@@ -125,4 +130,24 @@ it("reports a request_user_input_async question as a marked output", () => {
       "12",
     ),
   ).toBeUndefined();
+});
+// Value: protects=an async rollout message without an ID or questions still reaches the engine; fails_when=the missing fields break the event; why_new=the item ID and questions are new event data; seam=none; no_claim=how the engine delivers it
+it("reports an async message without an ID or questions", () => {
+  const line = (item: Record<string, unknown>) =>
+    JSON.stringify({
+      type: "event_msg",
+      payload: { type: "item_completed", turn_id: "turn", item },
+    });
+  // protects=an async message without an ID or questions stays a plain async output; fails_when=a missing field breaks the event; no_claim=none beyond protects
+  expect(
+    rolloutEvent(
+      line({
+        type: "AgentMessage",
+        content: [{ type: "Text", text: "Still working" }],
+        delivery: "async",
+      }),
+      "s",
+      "13",
+    )?.data,
+  ).toEqual({ delivery: "async", itemId: null, questions: null });
 });

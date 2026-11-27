@@ -30,8 +30,14 @@ export function itemEvent(
       ...event(sessionId, turnId, "output", `item/${item.id}`),
       text: item.text,
     };
-    // A request_user_input_async question, sent to the owner mid-turn.
-    if (item.delivery === "async") result.data = { delivery: "async" };
+    // A request_user_input_async question, sent to the owner mid-turn. The
+    // item ID is the tool call that the owner's answer names.
+    if (item.delivery === "async")
+      result.data = {
+        delivery: "async",
+        itemId: item.id,
+        questions: item.questions ?? null,
+      };
     return result;
   }
   return undefined;

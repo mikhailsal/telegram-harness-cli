@@ -3,6 +3,16 @@
 All notable changes to `thc` are listed here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- A question Codex asks during a task shows its options as buttons, one
+  message per question. A tap answers it inside the running task, in Queue
+  mode too, as Codex's own client does; when no task runs, the answer starts
+  the next one. The buttons then show the chosen answer, and a second tap or
+  a tap after `/new` changes nothing. A typed answer still works.
+
 ## [0.2.0] - 2026-11-24
 
 ### Added

@@ -15,13 +15,19 @@ export async function steerTurn(
 ): Promise<void> {
   const mode = ctx.store.getCursor("followup-mode") ?? ctx.config.mode;
   if (
-    mode !== "steer" ||
     !active.externalTurnId ||
     !ctx.adapter.steer ||
     !ctx.adapter.capabilities.has("steer")
   )
     return;
-  const turn = nextQueuedTurn(ctx);
+  // A button answer to Codex's question joins the running task in Queue mode
+  // too, as Codex's own client sends it.
+  const turn =
+    mode === "steer"
+      ? nextQueuedTurn(ctx)
+      : nextQueuedTurn(ctx, (queued) =>
+          Boolean(ctx.store.questionReply(queued.id)),
+        );
   if (!turn) return;
   trackReaction(ctx, turn.id);
   const text = await turnText(ctx, turn);

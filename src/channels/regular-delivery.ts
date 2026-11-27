@@ -1,15 +1,13 @@
 import { GrammyError } from "grammy";
 import type { Bot } from "grammy";
 import type { RenderChunk } from "./render.js";
+import type { SendExtra } from "./types.js";
 
 type Api = Bot["api"];
 type Chunk = Pick<RenderChunk, "text" | "plain">;
 interface Options {
   chatId: string;
-  extra: {
-    disable_notification: boolean;
-    reply_parameters?: { message_id: number };
-  };
+  extra: SendExtra;
   consumeDraft?: boolean;
   existingMessageId?: number;
   onMessageCreated?: (id: number) => void;

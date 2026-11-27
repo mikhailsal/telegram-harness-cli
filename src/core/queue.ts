@@ -134,6 +134,8 @@ export async function turnText(
   ctx: RuntimeContext,
   turn: Turn,
 ): Promise<string> {
+  const reply = ctx.store.questionReply(turn.id);
+  if (reply) return reply;
   const rows = ctx.store
     .listInbox(["assigned"])
     .filter((row) => row.turnId === turn.id);
@@ -167,10 +169,13 @@ export function consumeTurnInbox(ctx: RuntimeContext, turnId: string): void {
   for (const row of ctx.store.listInbox(["assigned"]))
     if (row.turnId === turnId) ctx.store.consumeInbox(row.updateId);
 }
-export function nextQueuedTurn(ctx: RuntimeContext): Turn | undefined {
+export function nextQueuedTurn(
+  ctx: RuntimeContext,
+  eligible: (turn: Turn) => boolean = () => true,
+): Turn | undefined {
   const turns = ctx.store
     .listTurns(["queued"])
-    .filter((turn) => turn.entityId === ctx.entityId);
+    .filter((turn) => turn.entityId === ctx.entityId && eligible(turn));
   const inbox = ctx.store.listInbox(["assigned"]);
   return turns.sort((left, right) => {
     const first = (id: string): number =>

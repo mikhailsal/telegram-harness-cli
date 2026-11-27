@@ -169,6 +169,33 @@ it("restores the source reply when a rich answer falls back to a document", asyn
   });
   expect(payloads[1]?.payload).not.toHaveProperty("fallbackReplyToMessageId");
 });
+// Value: protects=a chunk's buttons reach Telegram on every send path; fails_when=deliverChunk drops options.keyboard or a fallback rebuilds the options without it; why_new=no chunk carried buttons before question options; seam=fetch; no_claim=how Telegram draws them
+it("sends a chunk's buttons as its inline keyboard, also on the fallbacks", async () => {
+  const keyboard = [[{ text: "cats", callback_data: "aq:0123456789abcdef:0" }]];
+  const api = transport({ sendRichMessage: 400 });
+  await api.channel.deliverChunk(
+    "1",
+    { kind: "message", text: "Cats?", plain: "Cats?" },
+    { keyboard },
+  );
+  const regular = transport();
+  await regular.channel.deliverChunk(
+    "1",
+    { kind: "message", text: "Cats?", plain: "Cats?", style: "html" },
+    { keyboard },
+  );
+  // protects=the rich send, its plain fallback and the Regular send all carry the keyboard; fails_when=any path omits reply_markup; no_claim=none beyond protects
+  expect(
+    [...api.calls, ...regular.calls].map((call) => [
+      call.method,
+      call.body.reply_markup,
+    ]),
+  ).toEqual([
+    ["sendRichMessage", { inline_keyboard: keyboard }],
+    ["sendMessage", { inline_keyboard: keyboard }],
+    ["sendMessage", { inline_keyboard: keyboard }],
+  ]);
+});
 it("classifies permanent, throttled, server, and network failures without retrying sends", async () => {
   for (const [code, expected] of [
     [403, "forbidden"],

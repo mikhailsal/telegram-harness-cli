@@ -154,7 +154,10 @@ Telegram status use the same names: Queue and Steer (send immediately), with
 localized explanations. Without an argument, either command opens
 a chooser. Direct arguments and button selections produce the same temporary
 confirmation; the next request clears it. Answer format does not change the
-animated service status. `/new` and completed standalone compaction also produce
+animated service status. A question Codex asks during a task arrives as one
+message per question with its options as buttons. A tap answers inside the
+running task, in Queue mode too; after the task, it starts the next one.
+`/new` and completed standalone compaction also produce
 temporary service confirmations; user command messages remain in history.
 Regular answers finish a rich preview and then convert that same message to
 ordinary HTML formatting. The bridge checkpoints its ID before conversion;
