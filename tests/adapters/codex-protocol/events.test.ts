@@ -135,6 +135,32 @@ it("summarizes reasoning deltas and recognizes file reads", () => {
   ).toBeUndefined();
 });
 
+// Value: protects=the status shows the newest reasoning heading when Codex streams several summary parts; fails_when=parts are glued and the status reads "A****B"; why_new=the Telegram check showed glued headings; seam=ReasoningProgress.update; no_claim=Codex's choice of headings
+it("starts a new reasoning title for each summary part", () => {
+  const reasoning = new ReasoningProgress();
+  const part = (summaryIndex: number, delta: string) =>
+    reasoning.update(
+      "s",
+      notification.parse({
+        method: "item/reasoning/summaryTextDelta",
+        params: {
+          threadId: "s",
+          turnId: "t",
+          itemId: "1",
+          delta,
+          summaryIndex,
+        },
+      }),
+    );
+  expect(part(0, "**Reading the config**")).toMatchObject({
+    data: { detail: "Reading the config" },
+  });
+  expect(part(1, "**Checking")).toMatchObject({ data: { detail: "Checking" } });
+  expect(part(1, " the tests**")).toMatchObject({
+    data: { detail: "Checking the tests" },
+  });
+});
+
 describe("turn chains", () => {
   it("carries the root turn of a recovery turn in its live start event", () => {
     const message = notification.parse({
