@@ -131,7 +131,10 @@ it("atomically finalizes inbox and delivers ordered chunks with one reply and on
   expect(t.calls).toHaveLength(2);
   expect(t.calls[0]?.body.disable_notification).toBe(false);
   expect(t.calls[1]?.body.disable_notification).toBe(true);
-  expect(t.calls[0]?.body.reply_parameters).toEqual({ message_id: 22 });
+  expect(t.calls[0]?.body.reply_parameters).toEqual({
+    message_id: 22,
+    allow_sending_without_reply: true,
+  });
   expect(t.calls[1]?.body.reply_parameters).toBeUndefined();
   expect(t.store.messagesForTurn(turn.id)).toHaveLength(2);
   expect(onDelivered).toHaveBeenCalledOnce();

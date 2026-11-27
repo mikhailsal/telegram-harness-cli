@@ -61,7 +61,10 @@ export interface InlineButton {
 /** Bot API options shared by every message a chunk is sent as. */
 export interface SendExtra {
   disable_notification: boolean;
-  reply_parameters?: { message_id: number };
+  reply_parameters?: {
+    message_id: number;
+    allow_sending_without_reply?: boolean;
+  };
   reply_markup?: { inline_keyboard: InlineButton[][] };
 }
 export interface SendOptions {

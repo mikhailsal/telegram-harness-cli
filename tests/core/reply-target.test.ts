@@ -4,7 +4,7 @@ import type { Turn } from "../../src/store/index.js";
 import { Delivery } from "../../src/core/delivery.js";
 import { parseConfig } from "../../src/core/config.js";
 import type { RuntimeContext } from "../../src/core/context.js";
-import { replyTarget } from "../../src/core/reply-target.js";
+import { replySourceMessageId } from "../../src/core/reply-target.js";
 import { turnDraftId } from "../../src/core/turn-draft.js";
 import type { TelegramChannel } from "../../src/channels/index.js";
 
@@ -64,11 +64,45 @@ function delivery() {
     log: vi.fn(),
   } as unknown as RuntimeContext);
 }
-it("leaves a simple final answer unquoted when its source is the latest chat message", () => {
+function sender() {
+  const deliverChunk = vi
+    .fn<TelegramChannel["deliverChunk"]>()
+    .mockResolvedValue({ messageIds: [50], visibleText: "answer" });
+  const ctx = {
+    store,
+    channel: { hasDraft: () => false, deliverChunk },
+    config: parseConfig({
+      token: { env: "TOKEN" },
+      allowlist: [1],
+      sandbox: "read-only",
+    }),
+    now: () => new Date(at),
+    log: vi.fn(),
+  } as unknown as RuntimeContext;
+  return { delivery: new Delivery(ctx), deliverChunk };
+}
+it("leaves a simple final answer unquoted when its source is the latest chat message", async () => {
   const source = turn("source");
   visible(source.id, 10);
-  expect(delivery().finish(source, "completed", "answer")).toBe(true);
-  expect(store.listOutbox(["pending"])[0]?.replyToMessageId).toBeNull();
+  const { delivery: sending, deliverChunk } = sender();
+  expect(sending.finish(source, "completed", "answer")).toBe(true);
+  await sending.flush();
+  expect(deliverChunk.mock.calls[0]?.[2]).not.toHaveProperty(
+    "replyToMessageId",
+  );
+});
+// Value: protects=an answer queued while its question was the latest message quotes it when another message arrives before it is sent; fails_when=the quote is decided only when the answer is queued; why_new=a retry wait let a newer question sit between them; seam=Delivery to deliverChunk; no_claim=how Telegram draws the quote
+it("quotes the source when a message arrives while the answer waits to be sent", async () => {
+  const source = turn("waiting-source");
+  visible(source.id, 10);
+  const { delivery: sending, deliverChunk } = sender();
+  expect(sending.finish(source, "completed", "answer")).toBe(true);
+  visible(turn("newer").id, 11);
+  await sending.flush();
+  expect(deliverChunk.mock.calls[0]?.[2]).toHaveProperty(
+    "replyToMessageId",
+    10,
+  );
 });
 it("quotes the source of queued answers after intervening user or assistant text", () => {
   const first = turn("first"),
@@ -88,7 +122,7 @@ it("targets the last accepted steer in the recipient chat without leaking anothe
   visible(steer.id, 11);
   visible(steer.id, 99, "user", "other");
   visible(turn("later").id, 12);
-  expect(replyTarget(store, parent, "1")).toBe(11);
+  expect(replySourceMessageId(store, parent, "1")).toBe(11);
 });
 // Value: protects=a queued answer that replaces its own live preview still quotes its question when another message sits between them; fails_when=a matching draft drops the automatic quote again; why_new=the queue check found answers without their source; seam=Delivery to deliverChunk; no_claim=how Telegram draws the quote
 it("quotes the source when the final message replaces its own live draft", async () => {
@@ -215,7 +249,7 @@ it("uses a rich carrier to replace the preview before converting a regular answe
   expect(deliverChunk.mock.calls[0]?.[1]).toMatchObject({ style: "html" });
 });
 
-// Value: protects=an answer queued by an older version, whose payload still carries automaticReply, parses and keeps its quote; fails_when=the chunk schema drops the legacy field or the flag suppresses the quote; why_new=the flag is no longer written; seam=outbox payload to deliverChunk; no_claim=rows of other versions
+// Value: protects=an answer queued by an older version, whose payload carries automaticReply, parses and keeps its quote; fails_when=the chunk schema drops the field or the flag suppresses a needed quote; why_new=the flag now means the quote is rechecked at send time; seam=outbox payload to deliverChunk; no_claim=rows of other versions
 it("delivers a queued answer written by an older version with its quote", async () => {
   const source = turn("ccddee-source");
   const deliverChunk = vi

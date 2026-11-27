@@ -3,7 +3,9 @@ import type { Outbox } from "../store/index.js";
 import type { RuntimeContext } from "./context.js";
 import { turnDraftId } from "./turn-draft.js";
 
-type Chunk = Pick<RenderChunk, "kind" | "style">;
+type Chunk = Pick<RenderChunk, "kind" | "style"> & {
+  automaticReply?: boolean | undefined;
+};
 function conversionOptions(
   ctx: RuntimeContext,
   row: Outbox,
@@ -53,6 +55,23 @@ function richDraftOptions(
     ? { finalDraftId: turnDraftId(turn) }
     : {};
 }
+// An automatic quote is decided when the answer is sent, not when it is
+// queued: a message that arrives while the answer waits makes the quote
+// necessary, and a question that is still the latest message needs none.
+function replyOptions(
+  ctx: RuntimeContext,
+  row: Outbox,
+  chunk: Chunk,
+): SendOptions {
+  const target = row.replyToMessageId;
+  if (target === null) return {};
+  if (
+    chunk.automaticReply &&
+    target === ctx.store.latestVisibleMessageId(row.chatId)
+  )
+    return {};
+  return { replyToMessageId: target };
+}
 export function deliveryOptions(
   ctx: RuntimeContext,
   row: Outbox,
@@ -62,8 +81,6 @@ export function deliveryOptions(
     silent: row.disableNotification,
     ...conversionOptions(ctx, row, chunk),
     ...richDraftOptions(ctx, row, chunk),
-    ...(row.replyToMessageId === null
-      ? {}
-      : { replyToMessageId: row.replyToMessageId }),
+    ...replyOptions(ctx, row, chunk),
   };
 }

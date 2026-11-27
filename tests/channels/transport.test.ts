@@ -134,7 +134,7 @@ it("does not invent or consume a preview when its API operation fails", async ()
   await expect(failedAnswer.channel.send("1", "answer")).rejects.toThrow();
   expect(failedAnswer.channel.hasDraft("1", 42)).toBe(true);
 });
-// Value: protects=the question quote survives when a rich answer falls back to plain text or a document; fails_when=a fallback rebuilds the options without reply_parameters; why_new=the quote is no longer held back for the fallback only; seam=fetch; no_claim=how Telegram draws the quote
+// Value: protects=the question quote survives when a rich answer falls back to plain text or a document, and a deleted question never blocks the answer; fails_when=a fallback rebuilds the options without reply_parameters or the quote turns strict; why_new=the quote is no longer held back for the fallback only; seam=fetch; no_claim=how Telegram draws the quote
 it.each([
   {
     label: "plain text",
@@ -162,7 +162,9 @@ it.each([
     );
     expect(payloads.map(({ method }) => method)).toEqual(methods);
     for (const { payload } of payloads)
-      expect(payload).toMatchObject({ reply_parameters: { message_id: 58 } });
+      expect(payload).toMatchObject({
+        reply_parameters: { message_id: 58, allow_sending_without_reply: true },
+      });
   },
 );
 // Value: protects=a chunk's buttons reach Telegram on every send path; fails_when=deliverChunk drops options.keyboard or a fallback rebuilds the options without it; why_new=no chunk carried buttons before question options; seam=fetch; no_claim=how Telegram draws them

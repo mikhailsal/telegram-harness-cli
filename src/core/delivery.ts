@@ -8,7 +8,7 @@ import {
 import type { RenderChunk } from "../channels/index.js";
 import type { Outbox, OutboxInput, Turn } from "../store/index.js";
 import type { RuntimeContext } from "./context.js";
-import { replyTarget } from "./reply-target.js";
+import { replySourceMessageId } from "./reply-target.js";
 import { routingTurnId } from "./continuation.js";
 import { deliveryOptions } from "./delivery-options.js";
 import { messageFormat } from "./format.js";
@@ -18,7 +18,8 @@ const chunkSchema = z.strictObject({
   text: z.string(),
   plain: z.string(),
   author: z.enum(["assistant", "system", "user"]).optional(),
-  // Written by versions before 0.3.0; still read so their pending rows parse.
+  // The quote was chosen automatically, so delivery drops it when nothing
+  // has been posted since the question (see deliveryOptions).
   automaticReply: z.boolean().optional(),
   style: z.literal("html").optional(),
   filePath: z.string().optional(),
@@ -36,6 +37,9 @@ type TerminalStatus = "completed" | "failed" | "cancelled" | "interrupted";
 interface FinishOptions {
   silent?: boolean;
   replyToMessageId?: number;
+}
+interface RowOptions extends FinishOptions {
+  automaticReply?: boolean;
 }
 function fallbackText(context: RuntimeContext, status: TerminalStatus): string {
   const { config, store } = context;
@@ -116,19 +120,18 @@ export class Delivery {
     turn: Turn,
     chatId: string,
     options: FinishOptions,
-  ): FinishOptions {
-    const replyToMessageId =
-      options.replyToMessageId ?? replyTarget(this.context.store, turn, chatId);
-    return {
-      ...options,
-      ...(replyToMessageId === undefined ? {} : { replyToMessageId }),
-    };
+  ): RowOptions {
+    if (options.replyToMessageId !== undefined) return options;
+    const source = replySourceMessageId(this.context.store, turn, chatId);
+    return source === undefined
+      ? options
+      : { ...options, replyToMessageId: source, automaticReply: true };
   }
   private rows(
     turn: Turn,
     chunks: RenderChunk[],
     chatId: string,
-    options: FinishOptions,
+    options: RowOptions,
   ): OutboxInput[] {
     return chunks.map((chunk, index) => ({
       id: `${turn.id}/${String(index)}`,
@@ -136,7 +139,11 @@ export class Delivery {
       chunk: index,
       chatId,
       text: chunk.text,
-      payload: JSON.stringify(chunk),
+      payload: JSON.stringify(
+        options.automaticReply && index === 0
+          ? { ...chunk, automaticReply: true }
+          : chunk,
+      ),
       format:
         chunk.kind === "message"
           ? chunk.style === "html"

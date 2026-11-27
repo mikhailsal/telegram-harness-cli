@@ -37,6 +37,13 @@ export function classifyTelegramError(error: unknown): {
 function isLocalMedia(chunk: RenderChunk): boolean {
   return chunk.kind === "photo" || chunk.kind === "document";
 }
+// A quoted message the user deleted must not cost the answer: Telegram then
+// sends it unquoted instead of rejecting it.
+function quoteOf(
+  messageId: number,
+): NonNullable<SendExtra["reply_parameters"]> {
+  return { message_id: messageId, allow_sending_without_reply: true };
+}
 export class TelegramChannel {
   readonly bot: Bot;
   private readonly allowed: Set<string>;
@@ -149,7 +156,7 @@ export class TelegramChannel {
       const extra = {
         disable_notification: silent,
         ...(options.replyToMessageId && ids.length === 0
-          ? { reply_parameters: { message_id: options.replyToMessageId } }
+          ? { reply_parameters: quoteOf(options.replyToMessageId) }
           : {}),
       };
       const delivered = await this.sendChunk(chatId, chunk, extra);
@@ -166,7 +173,7 @@ export class TelegramChannel {
     const extra: SendExtra = {
       disable_notification: options.silent === true || chunk.kind === "file",
       ...(options.replyToMessageId
-        ? { reply_parameters: { message_id: options.replyToMessageId } }
+        ? { reply_parameters: quoteOf(options.replyToMessageId) }
         : {}),
       ...(options.keyboard
         ? { reply_markup: { inline_keyboard: options.keyboard } }
