@@ -134,41 +134,37 @@ it("does not invent or consume a preview when its API operation fails", async ()
   await expect(failedAnswer.channel.send("1", "answer")).rejects.toThrow();
   expect(failedAnswer.channel.hasDraft("1", 42)).toBe(true);
 });
-it("restores a suppressed reply only for a plain fallback without leaking metadata", async () => {
-  const api = transport({ sendRichMessage: 400 });
-  await api.channel.deliverChunk(
-    "1",
-    { kind: "message", text: "answer", plain: "answer" },
-    { fallbackReplyToMessageId: 58 },
-  );
-  expect(api.calls[0]?.body).not.toHaveProperty("reply_parameters");
-  expect(api.calls[1]?.body.reply_parameters).toEqual({ message_id: 58 });
-  expect(
-    api.calls.every((call) => !("fallbackReplyToMessageId" in call.body)),
-  ).toBe(true);
-});
-it("restores the source reply when a rich answer falls back to a document", async () => {
-  const api = transport({ sendRichMessage: 400 });
-  const payloads: { method: string; payload: unknown }[] = [];
-  api.channel.bot.api.config.use((prev, method, payload, signal) => {
-    payloads.push({ method, payload });
-    return prev(method, payload, signal);
-  });
-  const text = "x".repeat(5000);
-  await api.channel.deliverChunk(
-    "1",
-    { kind: "message", text, plain: text },
-    { fallbackReplyToMessageId: 58 },
-  );
-  expect(payloads.map(({ method }) => method)).toEqual([
-    "sendRichMessage",
-    "sendDocument",
-  ]);
-  expect(payloads[1]?.payload).toMatchObject({
-    reply_parameters: { message_id: 58 },
-  });
-  expect(payloads[1]?.payload).not.toHaveProperty("fallbackReplyToMessageId");
-});
+// Value: protects=the question quote survives when a rich answer falls back to plain text or a document; fails_when=a fallback rebuilds the options without reply_parameters; why_new=the quote is no longer held back for the fallback only; seam=fetch; no_claim=how Telegram draws the quote
+it.each([
+  {
+    label: "plain text",
+    text: "answer",
+    methods: ["sendRichMessage", "sendMessage"],
+  },
+  {
+    label: "a document",
+    text: "x".repeat(5000),
+    methods: ["sendRichMessage", "sendDocument"],
+  },
+])(
+  "keeps the source reply when a rich answer falls back to $label",
+  async ({ text, methods }) => {
+    const api = transport({ sendRichMessage: 400 });
+    const payloads: { method: string; payload: unknown }[] = [];
+    api.channel.bot.api.config.use((prev, method, payload, signal) => {
+      payloads.push({ method, payload });
+      return prev(method, payload, signal);
+    });
+    await api.channel.deliverChunk(
+      "1",
+      { kind: "message", text, plain: text },
+      { replyToMessageId: 58 },
+    );
+    expect(payloads.map(({ method }) => method)).toEqual(methods);
+    for (const { payload } of payloads)
+      expect(payload).toMatchObject({ reply_parameters: { message_id: 58 } });
+  },
+);
 // Value: protects=a chunk's buttons reach Telegram on every send path; fails_when=deliverChunk drops options.keyboard or a fallback rebuilds the options without it; why_new=no chunk carried buttons before question options; seam=fetch; no_claim=how Telegram draws them
 it("sends a chunk's buttons as its inline keyboard, also on the fallbacks", async () => {
   const keyboard = [[{ text: "cats", callback_data: "aq:0123456789abcdef:0" }]];

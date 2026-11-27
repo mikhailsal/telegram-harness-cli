@@ -90,7 +90,8 @@ it("targets the last accepted steer in the recipient chat without leaking anothe
   visible(turn("later").id, 12);
   expect(replyTarget(store, parent, "1")).toBe(11);
 });
-it("suppresses an automatic quote only when the final message replaces its own live draft", async () => {
+// Value: protects=a queued answer that replaces its own live preview still quotes its question when another message sits between them; fails_when=a matching draft drops the automatic quote again; why_new=the queue check found answers without their source; seam=Delivery to deliverChunk; no_claim=how Telegram draws the quote
+it("quotes the source when the final message replaces its own live draft", async () => {
   const source = turn("aabbcc-source");
   visible(source.id, 10);
   visible(turn("later").id, 11);
@@ -121,11 +122,8 @@ it("suppresses an automatic quote only when the final message replaces its own l
   expect(store.getOutbox(`${source.id}/0`)?.replyToMessageId).toBe(10);
   await sender.flush();
   expect(hasDraft).toHaveBeenCalledWith("1", turnDraftId(source), "rich");
-  expect(deliverChunk.mock.calls[0]?.[2]).not.toHaveProperty(
-    "replyToMessageId",
-  );
   expect(deliverChunk.mock.calls[0]?.[2]).toHaveProperty(
-    "fallbackReplyToMessageId",
+    "replyToMessageId",
     10,
   );
   expect(deliverChunk.mock.calls[0]?.[1]).not.toHaveProperty("automaticReply");
@@ -212,13 +210,13 @@ it("uses a rich carrier to replace the preview before converting a regular answe
   expect(hasDraft).toHaveBeenCalledWith("1", turnDraftId(source), "rich");
   expect(deliverChunk.mock.calls[0]?.[2]).toMatchObject({
     consumeDraft: true,
-    fallbackReplyToMessageId: 10,
+    replyToMessageId: 10,
   });
-  expect(deliverChunk.mock.calls[0]?.[2]?.replyToMessageId).toBeUndefined();
   expect(deliverChunk.mock.calls[0]?.[1]).toMatchObject({ style: "html" });
 });
 
-it("preserves legacy queued reply targets when a matching draft exists", async () => {
+// Value: protects=an answer queued by an older version, whose payload still carries automaticReply, parses and keeps its quote; fails_when=the chunk schema drops the legacy field or the flag suppresses the quote; why_new=the flag is no longer written; seam=outbox payload to deliverChunk; no_claim=rows of other versions
+it("delivers a queued answer written by an older version with its quote", async () => {
   const source = turn("ccddee-source");
   const deliverChunk = vi
     .fn<TelegramChannel["deliverChunk"]>()
@@ -244,43 +242,12 @@ it("preserves legacy queued reply targets when a matching draft exists", async (
       kind: "message",
       text: "answer",
       plain: "answer",
+      automaticReply: true,
     }),
     createdAt: at,
     replyToMessageId: 10,
   });
   await new Delivery(ctx).flush();
   expect(deliverChunk.mock.calls[0]?.[2]?.replyToMessageId).toBe(10);
-});
-
-it("rechecks the matching draft when a queued delivery retries", async () => {
-  const source = turn("ddeeff-source");
-  visible(source.id, 10);
-  visible(turn("later").id, 11);
-  let clock = new Date(at);
-  let draft = true;
-  const deliverChunk = vi
-    .fn<TelegramChannel["deliverChunk"]>()
-    .mockRejectedValueOnce(new Error("network"))
-    .mockResolvedValueOnce({ messageIds: [12], visibleText: "answer" });
-  const ctx = {
-    store,
-    channel: { hasDraft: () => draft, deliverChunk },
-    config: parseConfig({
-      token: { env: "TOKEN" },
-      allowlist: [1],
-      sandbox: "read-only",
-    }),
-    now: () => clock,
-    log: vi.fn(),
-  } as unknown as RuntimeContext;
-  const sender = new Delivery(ctx);
-  expect(sender.finish(source, "completed", "answer")).toBe(true);
-  await sender.flush();
-  expect(deliverChunk.mock.calls[0]?.[2]?.replyToMessageId).toBeUndefined();
-  expect(store.getOutbox(`${source.id}/0`)?.status).toBe("pending");
-  draft = false;
-  clock = new Date(clock.getTime() + 120000);
-  await sender.flush();
-  expect(deliverChunk.mock.calls[1]?.[2]?.replyToMessageId).toBe(10);
-  expect(store.getOutbox(`${source.id}/0`)?.status).toBe("sent");
+  expect(deliverChunk.mock.calls[0]?.[1]).not.toHaveProperty("automaticReply");
 });

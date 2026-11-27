@@ -172,20 +172,13 @@ export class TelegramChannel {
         ? { reply_markup: { inline_keyboard: options.keyboard } }
         : {}),
     };
-    const delivered = await this.sendChunk(
-      chatId,
-      chunk,
-      extra,
-      options.fallbackReplyToMessageId,
-      options,
-    );
+    const delivered = await this.sendChunk(chatId, chunk, extra, options);
     return { messageIds: [delivered.id], visibleText: delivered.text };
   }
   private async sendChunk(
     chatId: string,
     chunk: RenderChunk,
     extra: SendExtra,
-    fallbackReplyToMessageId?: number,
     options: SendOptions = {},
   ): Promise<{ id: number; text: string }> {
     if (isLocalMedia(chunk)) return this.sendLocalMedia(chatId, chunk, extra);
@@ -212,7 +205,7 @@ export class TelegramChannel {
           : { onMessageCreated: options.onMessageCreated }),
       });
     await this.finishRichDraft(chatId, chunk, options.finalDraftId);
-    return this.sendRichChunk(chatId, chunk, extra, fallbackReplyToMessageId);
+    return this.sendRichChunk(chatId, chunk, extra);
   }
   private async finishRichDraft(
     chatId: string,
@@ -235,7 +228,6 @@ export class TelegramChannel {
     chatId: string,
     chunk: RenderChunk,
     extra: SendExtra,
-    fallbackReplyToMessageId?: number,
   ): Promise<{ id: number; text: string }> {
     try {
       const message = await this.bot.api.sendRichMessage(
@@ -246,18 +238,12 @@ export class TelegramChannel {
       return { id: message.message_id, text: chunk.plain };
     } catch (error) {
       if (classifyTelegramError(error).kind !== "bad-request") throw error;
-      const fallback = {
-        ...extra,
-        ...(fallbackReplyToMessageId === undefined
-          ? {}
-          : { reply_parameters: { message_id: fallbackReplyToMessageId } }),
-      };
       try {
         if (chunk.plain.length > 4096) throw error;
         const message = await this.bot.api.sendMessage(
           chatId,
           chunk.plain,
-          fallback,
+          extra,
         );
         return { id: message.message_id, text: chunk.plain };
       } catch (plainError) {
@@ -266,7 +252,7 @@ export class TelegramChannel {
         const message = await this.bot.api.sendDocument(
           chatId,
           new InputFile(Buffer.from(chunk.text), "response.md"),
-          { ...fallback, disable_notification: true },
+          { ...extra, disable_notification: true },
         );
         return { id: message.message_id, text: chunk.text };
       }

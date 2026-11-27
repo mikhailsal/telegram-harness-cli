@@ -70,7 +70,6 @@ export interface SendOptions {
   existingMessageId?: number;
   onMessageCreated?: (messageId: number) => void;
   replyToMessageId?: number;
-  fallbackReplyToMessageId?: number;
   silent?: boolean;
   format?: TelegramMessageFormat;
   keyboard?: InlineButton[][];

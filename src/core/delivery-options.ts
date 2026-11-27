@@ -57,20 +57,12 @@ export function deliveryOptions(
   ctx: RuntimeContext,
   row: Outbox,
   chunk: Chunk,
-  automaticReply: boolean | undefined,
 ): SendOptions {
-  const conversion = conversionOptions(ctx, row, chunk);
-  const replacesDraft =
-    automaticReply &&
-    (conversion.consumeDraft === true || matchingDraft(ctx, row, chunk));
   return {
     silent: row.disableNotification,
-    ...conversion,
+    ...conversionOptions(ctx, row, chunk),
     ...richDraftOptions(ctx, row, chunk),
-    ...(replacesDraft && row.replyToMessageId !== null
-      ? { fallbackReplyToMessageId: row.replyToMessageId }
-      : {}),
-    ...(row.replyToMessageId === null || replacesDraft
+    ...(row.replyToMessageId === null
       ? {}
       : { replyToMessageId: row.replyToMessageId }),
   };

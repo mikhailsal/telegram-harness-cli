@@ -18,6 +18,7 @@ const chunkSchema = z.strictObject({
   text: z.string(),
   plain: z.string(),
   author: z.enum(["assistant", "system", "user"]).optional(),
+  // Written by versions before 0.3.0; still read so their pending rows parse.
   automaticReply: z.boolean().optional(),
   style: z.literal("html").optional(),
   filePath: z.string().optional(),
@@ -35,7 +36,6 @@ type TerminalStatus = "completed" | "failed" | "cancelled" | "interrupted";
 interface FinishOptions {
   silent?: boolean;
   replyToMessageId?: number;
-  automaticReply?: boolean;
 }
 function fallbackText(context: RuntimeContext, status: TerminalStatus): string {
   const { config, store } = context;
@@ -121,10 +121,6 @@ export class Delivery {
       options.replyToMessageId ?? replyTarget(this.context.store, turn, chatId);
     return {
       ...options,
-      ...(options.replyToMessageId === undefined &&
-      replyToMessageId !== undefined
-        ? { automaticReply: true }
-        : {}),
       ...(replyToMessageId === undefined ? {} : { replyToMessageId }),
     };
   }
@@ -140,12 +136,7 @@ export class Delivery {
       chunk: index,
       chatId,
       text: chunk.text,
-      payload: JSON.stringify({
-        ...chunk,
-        ...(index === 0 && options.automaticReply
-          ? { automaticReply: true }
-          : {}),
-      }),
+      payload: JSON.stringify(chunk),
       format:
         chunk.kind === "message"
           ? chunk.style === "html"
@@ -219,11 +210,12 @@ export class Delivery {
     if (!store.beginSend(row.id, this.context.now().toISOString())) return;
     const chunk = this.prepareChunk(row);
     if (!chunk) return;
-    const { automaticReply, keyboard, ...renderedChunk } = chunk;
+    const { keyboard, ...renderedChunk } = chunk;
+    delete renderedChunk.automaticReply;
     let delivered: Awaited<ReturnType<typeof channel.deliverChunk>>;
     try {
       delivered = await channel.deliverChunk(row.chatId, renderedChunk, {
-        ...deliveryOptions(this.context, row, chunk, automaticReply),
+        ...deliveryOptions(this.context, row, chunk),
         ...(keyboard ? { keyboard } : {}),
       });
       if (delivered.messageIds[0] === undefined) {
