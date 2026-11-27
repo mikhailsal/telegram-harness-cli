@@ -133,7 +133,7 @@
 **Priority:** P2
 **Depends on:** None
 
-**Completed:** unreleased (2026-11-25), in `src/core/async-question.ts` and `src/core/question-answer.ts`.
+**Completed:** v0.3.0 (2026-11-25), in `src/core/async-question.ts` and `src/core/question-answer.ts`.
 
 ### Show model and effort in the live status draft
 
